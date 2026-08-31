@@ -668,10 +668,58 @@ function createChick() {
   return group;
 }
 
+// =============================================
+//  GOLF CLUB (Taco de Golfe)
+// =============================================
+let charClub = null;
+let isSwingingClub = false;
+let swingAnimProgress = 0;
+
+function createGolfClub() {
+  const clubGroup = new THREE.Group();
+
+  // Grip handle
+  const gripGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.32, 8);
+  const gripMat = new THREE.MeshStandardMaterial({ color: '#2d3436', roughness: 0.8 });
+  const grip = new THREE.Mesh(gripGeo, gripMat);
+  grip.position.y = 0.55;
+  grip.castShadow = true;
+  clubGroup.add(grip);
+
+  // Metallic chrome shaft
+  const shaftGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.75, 8);
+  const shaftMat = new THREE.MeshStandardMaterial({ color: '#dfe6e9', metalness: 0.95, roughness: 0.1 });
+  const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+  shaft.position.y = 0.1;
+  shaft.castShadow = true;
+  clubGroup.add(shaft);
+
+  // Metallic Putter Head (Taco)
+  const headGeo = new THREE.BoxGeometry(0.12, 0.06, 0.22);
+  const headMat = new THREE.MeshStandardMaterial({ color: '#b2bec3', metalness: 0.9, roughness: 0.2 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.set(0, -0.27, 0.06);
+  head.castShadow = true;
+  clubGroup.add(head);
+
+  // Position relative to character's hands
+  clubGroup.position.set(0.38, 0.35, 0.25);
+  clubGroup.rotation.set(0.2, 0, -0.2);
+
+  return clubGroup;
+}
+
 function createCharModel(charKey) {
-  if (charKey === 'bunny') return createBunny();
-  if (charKey === 'frog') return createFrog();
-  if (charKey === 'chick') return createChick();
+  let model;
+  if (charKey === 'bunny') model = createBunny();
+  else if (charKey === 'frog') model = createFrog();
+  else if (charKey === 'chick') model = createChick();
+
+  // Attach Taco de Golfe to golfer
+  charClub = createGolfClub();
+  model.add(charClub);
+
+  return model;
 }
 
 // =============================================
@@ -810,6 +858,10 @@ function endAim(cx, cy) {
       scoreEl.textContent = strokes;
       sfxSwing(aimPower);
 
+      // Trigger putting swing animation on taco de golfe
+      isSwingingClub = true;
+      swingAnimProgress = 0;
+
       // Save character position before shot (stays here while ball moves)
       charStandPos.copy(charGroup.position);
 
@@ -829,35 +881,42 @@ function endAim(cx, cy) {
 }
 
 // =============================================
-//  HOLE DETECTION & COLLISIONS
+//  HOLE SINK & CELEBRATION
+// =============================================
+function triggerHoleSink() {
+  if (inHole) return;
+  inHole = true;
+  sfxHoleSink();
+  setTimeout(() => sfxVictory(), 300);
+
+  const msgs = {
+    1: 'Hole in One! ⛳✨',
+    2: 'Eagle! 🦅',
+    3: 'Birdie! 🐦',
+    4: 'Par! ⛳',
+  };
+  messageEl.textContent = msgs[strokes] || 'Nice shot! 🎉';
+  messageEl.className = 'show';
+  messageEl.style.display = 'block';
+
+  // Ball stops and sits inside the hole cup
+  ballBody.velocity.set(0, 0, 0);
+  ballBody.angularVelocity.set(0, 0, 0);
+  ballBody.sleep();
+  ballMesh.position.set(0, -0.15, -8);
+
+  setTimeout(() => {
+    ballMesh.visible = false;
+    playAgainBtn.style.display = 'block';
+  }, 700);
+}
+
+// =============================================
+//  COLLISIONS (Wall bounces)
 // =============================================
 world.addEventListener('beginContact', (e) => {
   const a = e.bodyA, b = e.bodyB;
-  if ((a === ballBody && b === holeBody) || (b === ballBody && a === holeBody)) {
-    if (inHole) return;
-    inHole = true;
-    sfxHoleSink();
-    setTimeout(() => sfxVictory(), 350);
-
-    const msgs = {
-      1: 'Hole in One! ⛳✨',
-      2: 'Eagle! 🦅',
-      3: 'Birdie! 🐦',
-      4: 'Par! ⛳',
-    };
-    messageEl.textContent = msgs[strokes] || 'Nice shot! 🎉';
-    messageEl.className = 'show';
-    messageEl.style.display = 'block';
-
-    ballBody.velocity.set(0, -1, 0);
-    ballBody.angularVelocity.set(0, 0, 0);
-
-    setTimeout(() => {
-      ballMesh.visible = false;
-      // Show play again button
-      playAgainBtn.style.display = 'block';
-    }, 600);
-  } else if (a === ballBody || b === ballBody) {
+  if (a === ballBody || b === ballBody) {
     if (ballBody.velocity.length() > 0.4) {
       sfxBounce();
     }
@@ -926,16 +985,39 @@ const clock = new THREE.Clock();
 let elapsed = 0;
 
 function tick() {
-  const dt = clock.getDelta();
+  const dt = Math.min(clock.getDelta(), 0.1);
   elapsed = clock.getElapsedTime();
 
   // Physics
   world.step(1 / 60, dt, 3);
 
-  // Sync ball mesh to physics
-  for (const obj of objectsToUpdate) {
-    obj.mesh.position.copy(obj.body.position);
-    obj.mesh.quaternion.copy(obj.body.quaternion);
+  // Sync ball mesh to physics (unless sunk in hole)
+  if (!inHole) {
+    for (const obj of objectsToUpdate) {
+      obj.mesh.position.copy(obj.body.position);
+      obj.mesh.quaternion.copy(obj.body.quaternion);
+    }
+  }
+
+  // HOLE DETECTION: Check if ball enters hole cup (0, 0, -8)
+  const HOLE_X = 0;
+  const HOLE_Z = -8;
+  const HOLE_RADIUS = 0.52;
+  const distToHole = Math.hypot(ballMesh.position.x - HOLE_X, ballMesh.position.z - HOLE_Z);
+
+  if (!inHole && gameStarted) {
+    // Gravitational suction when rolling near the hole rim
+    if (distToHole < HOLE_RADIUS * 1.4) {
+      const pull = 10.0;
+      ballBody.velocity.x += (HOLE_X - ballMesh.position.x) * pull * dt;
+      ballBody.velocity.z += (HOLE_Z - ballMesh.position.z) * pull * dt;
+      ballBody.velocity.y -= 14.0 * dt;
+
+      // When ball drops inside the cup perimeter
+      if (distToHole < HOLE_RADIUS * 0.78) {
+        triggerHoleSink();
+      }
+    }
   }
 
   // Ball stopped check — character walks to ball when it stops
@@ -969,6 +1051,27 @@ function tick() {
     // Look toward ball
     const bp = ballMesh.position;
     charGroup.lookAt(bp.x, 0, bp.z);
+
+    // GOLF CLUB ANIMATION (Taco de Golfe)
+    if (charClub) {
+      if (isSwingingClub) {
+        swingAnimProgress += dt * 4.5;
+        if (swingAnimProgress < 0.35) {
+          charClub.rotation.x = 0.2 + (swingAnimProgress / 0.35) * 0.9;
+        } else if (swingAnimProgress < 1.0) {
+          charClub.rotation.x = 0.2 + (1.0 - (swingAnimProgress - 0.35) / 0.65) * 0.9;
+        } else {
+          isSwingingClub = false;
+          charClub.rotation.set(0.2, 0, -0.2);
+        }
+      } else if (isAiming) {
+        // Backswing proportional to aim power
+        charClub.rotation.x = 0.2 - aimPower * 0.9;
+        charClub.rotation.z = -0.2 - aimPower * 0.3;
+      } else {
+        charClub.rotation.set(0.2, 0, -0.2);
+      }
+    }
   }
 
   // Animate clouds
