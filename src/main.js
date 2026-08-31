@@ -912,6 +912,12 @@ function triggerHoleSink() {
   setTimeout(() => {
     ballMesh.visible = false;
     if (endActionsContainer) endActionsContainer.style.display = 'flex';
+    try {
+      if (window.ArcadeLeaderboard) {
+        const golfScore = Math.max(10, 1000 - (strokes - 1) * 200);
+        window.ArcadeLeaderboard.submitScore('cute-mini-golf', golfScore);
+      }
+    } catch(e){}
   }, 700);
 }
 
