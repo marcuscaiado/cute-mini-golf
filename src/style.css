@@ -330,3 +330,75 @@ body, html {
   box-shadow: 0 8px 25px rgba(255, 159, 67, 0.4);
 }
 
+/* ============ MOBILE / GALAXY A55 RESPONSIVE ============ */
+@media (max-width: 768px) {
+  .char-select-title {
+    font-size: 32px;
+    margin-bottom: 18px;
+  }
+  .char-grid {
+    gap: 12px;
+    padding: 0 10px;
+  }
+  .char-card {
+    width: 120px;
+    padding: 14px 10px;
+    border-radius: 18px;
+    gap: 8px;
+  }
+  .char-preview {
+    width: 65px;
+    height: 65px;
+    font-size: 34px;
+  }
+  .char-name {
+    font-size: 16px;
+  }
+  .char-desc {
+    font-size: 11px;
+  }
+  #ui {
+    top: 10px;
+    left: 12px;
+  }
+  .title {
+    font-size: 20px;
+  }
+  .strokes-box {
+    font-size: 16px;
+    padding: 6px 14px;
+  }
+  .strokes-count {
+    font-size: 22px;
+  }
+  .char-indicator {
+    font-size: 11px;
+  }
+  .top-nav {
+    top: 10px;
+    right: 10px;
+    gap: 8px;
+  }
+  .nav-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 10px;
+  }
+  #message {
+    font-size: 32px;
+  }
+  #end-actions-container {
+    gap: 8px;
+    width: 90%;
+  }
+  .action-btn {
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 12px;
+  }
+  #aim-hint {
+    font-size: 12px;
+    bottom: 12px;
+  }
+}
+
