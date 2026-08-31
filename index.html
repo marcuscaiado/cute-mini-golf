@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cute Mini Golf 3D</title>
+    <meta name="description" content="A cute, colorful 3D mini-golf game with Nintendo-inspired visuals" />
+  </head>
+  <body>
+    <!-- CHARACTER SELECT SCREEN -->
+    <div id="char-select">
+      <h1 class="char-select-title">Pick Your Golfer!</h1>
+      <div class="char-grid">
+        <button class="char-card" data-char="bunny">
+          <div class="char-preview" id="preview-bunny"></div>
+          <span class="char-name">Bunny</span>
+          <span class="char-desc">Lucky putter!</span>
+        </button>
+        <button class="char-card" data-char="frog">
+          <div class="char-preview" id="preview-frog"></div>
+          <span class="char-name">Froggy</span>
+          <span class="char-desc">Bouncy shots!</span>
+        </button>
+        <button class="char-card" data-char="chick">
+          <div class="char-preview" id="preview-chick"></div>
+          <span class="char-name">Chicky</span>
+          <span class="char-desc">Speedy roller!</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- GAME UI -->
+    <div id="game-ui" style="display:none;">
+      <div id="ui">
+        <h1 class="title">⛳ Mini Golf</h1>
+        <div class="score">Strokes: <span id="strokes">0</span></div>
+        <div class="char-indicator" id="char-indicator"></div>
+      </div>
+      <div id="power-bar-container">
+        <div id="power-bar"></div>
+      </div>
+      <div id="message"></div>
+      <button id="play-again-btn">Play Again! 🔄</button>
+      <div id="aim-hint">Click & drag to aim and shoot!</div>
+    </div>
+
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
