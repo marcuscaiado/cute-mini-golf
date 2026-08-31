@@ -29,6 +29,9 @@ const messageEl = document.getElementById('message');
 const charIndicatorEl = document.getElementById('char-indicator');
 const aimHintEl = document.getElementById('aim-hint');
 const playAgainBtn = document.getElementById('play-again-btn');
+const endActionsContainer = document.getElementById('end-actions-container');
+const navChangeCharBtn = document.getElementById('nav-change-char-btn');
+const switchCharBtn = document.getElementById('switch-char-btn');
 
 // =============================================
 //  CHARACTER DEFINITIONS
@@ -752,6 +755,7 @@ document.querySelectorAll('.char-card').forEach(card => {
 function startGame(charKey) {
   charSelectEl.style.display = 'none';
   gameUiEl.style.display = 'block';
+  if (navChangeCharBtn) navChangeCharBtn.style.display = 'inline-flex';
   charIndicatorEl.textContent = `Playing as ${selectedChar.emoji} ${selectedChar.name}`;
 
   // Remove old character if restarting
@@ -907,7 +911,7 @@ function triggerHoleSink() {
 
   setTimeout(() => {
     ballMesh.visible = false;
-    playAgainBtn.style.display = 'block';
+    if (endActionsContainer) endActionsContainer.style.display = 'flex';
   }, 700);
 }
 
@@ -924,18 +928,16 @@ world.addEventListener('beginContact', (e) => {
 });
 
 // =============================================
-//  PLAY AGAIN
+//  RESET & PLAY AGAIN
 // =============================================
-playAgainBtn.addEventListener('click', () => {
-  sfxClick();
-  // Reset state
+function resetGameState() {
   inHole = false;
   isBallMoving = false;
   strokes = 0;
   scoreEl.textContent = '0';
   messageEl.style.display = 'none';
   messageEl.className = '';
-  playAgainBtn.style.display = 'none';
+  if (endActionsContainer) endActionsContainer.style.display = 'none';
   aimHintEl.style.display = 'block';
 
   // Reset ball
@@ -955,7 +957,24 @@ playAgainBtn.addEventListener('click', () => {
   // Reset camera
   camera.position.set(0, 12, 18);
   camera.lookAt(0, 0, 0);
+}
+
+playAgainBtn.addEventListener('click', () => {
+  sfxClick();
+  resetGameState();
 });
+
+function openCharacterSelect() {
+  sfxClick();
+  resetGameState();
+  gameStarted = false;
+  gameUiEl.style.display = 'none';
+  if (navChangeCharBtn) navChangeCharBtn.style.display = 'none';
+  charSelectEl.style.display = 'flex';
+}
+
+if (switchCharBtn) switchCharBtn.addEventListener('click', openCharacterSelect);
+if (navChangeCharBtn) navChangeCharBtn.addEventListener('click', openCharacterSelect);
 
 // =============================================
 //  RESET (Out of bounds)
