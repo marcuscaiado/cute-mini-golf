@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cute Mini Golf 3D</title>
     <meta name="description" content="A cute, colorful 3D mini-golf game with Nintendo-inspired visuals" />
-    <script type="module" crossorigin src="/cute-mini-golf/assets/index-D60j5GVZ.js"></script>
-    <link rel="stylesheet" crossorigin href="/cute-mini-golf/assets/index-CZlNd-qf.css">
+    <script type="module" crossorigin src="/cute-mini-golf/assets/index-L3waN27k.js"></script>
+    <link rel="stylesheet" crossorigin href="/cute-mini-golf/assets/index-BHIrOUge.css">
   </head>
   <body>
+    <!-- TOP NAVIGATION BAR -->
+    <nav class="top-nav">
+      <a href="https://marcuscaiado.github.io/marcus-arcade/" class="nav-btn arcade-link">🕹️ Arcade Hub</a>
+      <button id="nav-change-char-btn" class="nav-btn" style="display: none;">👤 Change Golfer</button>
+    </nav>
+
     <!-- CHARACTER SELECT SCREEN -->
     <div id="char-select">
       <h1 class="char-select-title">Pick Your Golfer!</h1>
@@ -42,7 +48,14 @@
         <div id="power-bar"></div>
       </div>
       <div id="message"></div>
-      <button id="play-again-btn">Play Again! 🔄</button>
+      
+      <!-- END GAME ACTIONS -->
+      <div id="end-actions-container" style="display: none;">
+        <button id="play-again-btn" class="action-btn btn-primary">Play Again 🔄</button>
+        <button id="switch-char-btn" class="action-btn btn-secondary">Switch Golfer 👤</button>
+        <a href="https://marcuscaiado.github.io/marcus-arcade/" class="action-btn btn-arcade">Arcade Hub 🕹️</a>
+      </div>
+
       <div id="aim-hint">Click & drag to aim and shoot!</div>
     </div>
 
