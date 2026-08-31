@@ -1,6 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { sfxSwing, sfxBounce, sfxHoleSink, sfxVictory, sfxClick, sfxSelect } from './audio.js';
 
 // =============================================
 //  CUTE MINI GOLF 3D
@@ -693,6 +694,7 @@ scene.add(arrowMesh);
 // =============================================
 document.querySelectorAll('.char-card').forEach(card => {
   card.addEventListener('click', () => {
+    sfxSelect();
     selectedCharKey = card.dataset.char;
     selectedChar = characters[selectedCharKey];
     startGame(selectedCharKey);
@@ -806,6 +808,7 @@ function endAim(cx, cy) {
     if (dist > 5) {
       strokes++;
       scoreEl.textContent = strokes;
+      sfxSwing(aimPower);
 
       // Save character position before shot (stays here while ball moves)
       charStandPos.copy(charGroup.position);
@@ -826,13 +829,15 @@ function endAim(cx, cy) {
 }
 
 // =============================================
-//  HOLE DETECTION
+//  HOLE DETECTION & COLLISIONS
 // =============================================
 world.addEventListener('beginContact', (e) => {
   const a = e.bodyA, b = e.bodyB;
   if ((a === ballBody && b === holeBody) || (b === ballBody && a === holeBody)) {
     if (inHole) return;
     inHole = true;
+    sfxHoleSink();
+    setTimeout(() => sfxVictory(), 350);
 
     const msgs = {
       1: 'Hole in One! ⛳✨',
@@ -852,6 +857,10 @@ world.addEventListener('beginContact', (e) => {
       // Show play again button
       playAgainBtn.style.display = 'block';
     }, 600);
+  } else if (a === ballBody || b === ballBody) {
+    if (ballBody.velocity.length() > 0.4) {
+      sfxBounce();
+    }
   }
 });
 
@@ -859,6 +868,7 @@ world.addEventListener('beginContact', (e) => {
 //  PLAY AGAIN
 // =============================================
 playAgainBtn.addEventListener('click', () => {
+  sfxClick();
   // Reset state
   inHole = false;
   isBallMoving = false;
