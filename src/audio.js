@@ -88,11 +88,44 @@ export function sfxRoll() {
   playTone(80, 0.3, 'sine', 0.02);
 }
 
-/** Ball bouncing off a wall — rubber thud */
-export function sfxBounce() {
-  playTone(220, 0.1, 'triangle', 0.1);
-  playTone(110, 0.08, 'square', 0.04, 0.02);
-  playNoise(0.06, 0.04);
+/** Ball bouncing off a wall — crisp ping-pong ball 'pock/ping' tap */
+export function sfxBounce(intensity = 1.0) {
+  const ctx = getCtx();
+  const t = ctx.currentTime;
+  const vol = Math.min(0.3, 0.08 + intensity * 0.15);
+
+  // 1. High resonant celluloid "ping" pop (fast exponential pitch drop)
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  const startFreq = 1250 + (Math.random() - 0.5) * 150;
+  osc.frequency.setValueAtTime(startFreq, t);
+  osc.frequency.exponentialRampToValueAtTime(startFreq * 0.4, t + 0.04);
+
+  gain.gain.setValueAtTime(vol * 1.6, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.045);
+
+  // 2. Hollow ping-pong shell body resonance (~540Hz down to ~300Hz)
+  const bodyOsc = ctx.createOscillator();
+  const bodyGain = ctx.createGain();
+  bodyOsc.type = 'sine';
+  bodyOsc.frequency.setValueAtTime(540, t);
+  bodyOsc.frequency.exponentialRampToValueAtTime(300, t + 0.035);
+  bodyGain.gain.setValueAtTime(vol * 0.9, t);
+  bodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+
+  bodyOsc.connect(bodyGain);
+  bodyGain.connect(ctx.destination);
+  bodyOsc.start(t);
+  bodyOsc.stop(t + 0.035);
+
+  // 3. Crisp acoustic click/tap (filtered noise burst)
+  playNoise(0.02, vol * 0.8);
 }
 
 /** Ball drops into hole — cute descending plop */

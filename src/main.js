@@ -12,6 +12,8 @@ import { sfxSwing, sfxBounce, sfxHoleSink, sfxVictory, sfxClick, sfxSelect } fro
 let selectedCharKey = null;
 let selectedChar = null;
 let strokes = 0;
+let totalStrokes = 0;
+let currentHoleNumber = 1;
 let isAiming = false;
 let aimPower = 0;
 let isBallMoving = false;
@@ -23,15 +25,24 @@ let charStandPos = new THREE.Vector3(0, 0, 9.2); // Where the character stands
 const charSelectEl = document.getElementById('char-select');
 const gameUiEl = document.getElementById('game-ui');
 const scoreEl = document.getElementById('strokes');
+const holeBadgeEl = document.getElementById('hole-badge');
+const totalStrokesEl = document.getElementById('total-strokes');
 const powerContainerEl = document.getElementById('power-bar-container');
 const powerBarEl = document.getElementById('power-bar');
 const messageEl = document.getElementById('message');
 const charIndicatorEl = document.getElementById('char-indicator');
 const aimHintEl = document.getElementById('aim-hint');
+const nextHoleBtn = document.getElementById('next-hole-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const endActionsContainer = document.getElementById('end-actions-container');
 const navChangeCharBtn = document.getElementById('nav-change-char-btn');
 const switchCharBtn = document.getElementById('switch-char-btn');
+
+function updateScoreDisplay() {
+  if (scoreEl) scoreEl.textContent = strokes;
+  if (holeBadgeEl) holeBadgeEl.textContent = `Hole ${currentHoleNumber}`;
+  if (totalStrokesEl) totalStrokesEl.textContent = totalStrokes + (inHole ? 0 : strokes);
+}
 
 // =============================================
 //  CHARACTER DEFINITIONS
@@ -130,12 +141,12 @@ const ballPhysMat = new CANNON.Material('ball');
 const wallPhysMat = new CANNON.Material('wall');
 
 world.addContactMaterial(new CANNON.ContactMaterial(ballPhysMat, groundPhysMat, {
-  friction: 0.4,
-  restitution: 0.25
+  friction: 0.2,
+  restitution: 0.7
 }));
 world.addContactMaterial(new CANNON.ContactMaterial(ballPhysMat, wallPhysMat, {
-  friction: 0.1,
-  restitution: 0.6
+  friction: 0.02,
+  restitution: 0.95
 }));
 
 const objectsToUpdate = [];
@@ -183,23 +194,164 @@ createStaticBox(11, 1.2, 0.6, 0, 0.35, 11.3, wallMat, wallPhysMat);
 createStaticBox(0.6, 1.2, 22, -5.3, 0.35, 0, wallMat, wallPhysMat);
 createStaticBox(0.6, 1.2, 22, 5.3, 0.35, 0, wallMat, wallPhysMat);
 
-createStaticBox(3.5, 0.8, 0.8, -1.5, 0.4, -2.5, obstacleMat, wallPhysMat);
-createStaticBox(3.5, 0.8, 0.8, 1.5, 0.4, 2, obstacleMat, wallPhysMat);
+// =============================================
+//  DYNAMIC PROCEDURAL OBSTACLE GENERATOR
+// =============================================
+let currentObstacleObjects = [];
 
-const bumpMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.8, 1, 0.5, 16),
-  obstacleMat
-);
-bumpMesh.position.set(3, 0.25, -5);
-bumpMesh.castShadow = true;
-bumpMesh.receiveShadow = true;
-scene.add(bumpMesh);
-world.addBody(new CANNON.Body({
-  mass: 0,
-  position: new CANNON.Vec3(3, 0.25, -5),
-  shape: new CANNON.Cylinder(0.8, 1, 0.5, 16),
-  material: wallPhysMat
-}));
+function clearObstacles() {
+  for (const obs of currentObstacleObjects) {
+    if (obs.mesh) {
+      scene.remove(obs.mesh);
+      if (obs.mesh.geometry) obs.mesh.geometry.dispose();
+    }
+    if (obs.body) {
+      world.removeBody(obs.body);
+    }
+  }
+  currentObstacleObjects = [];
+}
+
+function addObstacleBox(sx, sy, sz, px, py, pz, rotY = 0, material = obstacleMat) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+  mesh.position.set(px, py, pz);
+  mesh.rotation.y = rotY;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const body = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px, py, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, sy / 2, sz / 2)),
+    material: wallPhysMat
+  });
+  if (rotY !== 0) {
+    body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), rotY);
+  }
+  world.addBody(body);
+  currentObstacleObjects.push({ mesh, body });
+  return { mesh, body };
+}
+
+function addBumperCylinder(radius, height, px, pz, colorHex = 0xff6b9d) {
+  const group = new THREE.Group();
+  const cylGeo = new THREE.CylinderGeometry(radius, radius, height, 20);
+  const cylMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.35, metalness: 0.1 });
+  const cylMesh = new THREE.Mesh(cylGeo, cylMat);
+  cylMesh.position.y = height / 2;
+  cylMesh.castShadow = true;
+  cylMesh.receiveShadow = true;
+  group.add(cylMesh);
+
+  // Shiny white bumper ring
+  const capGeo = new THREE.TorusGeometry(radius * 0.85, 0.06, 8, 24);
+  const capMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.2,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.35
+  });
+  const cap = new THREE.Mesh(capGeo, capMat);
+  cap.rotation.x = Math.PI / 2;
+  cap.position.y = height + 0.02;
+  group.add(cap);
+
+  group.position.set(px, 0, pz);
+  scene.add(group);
+
+  const body = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px, height / 2, pz),
+    shape: new CANNON.Cylinder(radius, radius, height, 16),
+    material: wallPhysMat
+  });
+  world.addBody(body);
+  currentObstacleObjects.push({ mesh: group, body });
+  return { mesh: group, body };
+}
+
+function isFarEnough(x, z, minDist = 2.0) {
+  if (Math.hypot(x - holePos.x, z - holePos.z) < minDist + 0.4) return false;
+  if (Math.hypot(x - teePos.x, z - teePos.z) < minDist) return false;
+  return true;
+}
+
+function generateCourseLayout(archetypeIndex = -1) {
+  clearObstacles();
+
+  const archetypes = [
+    // 0: Pinball Alley (Round Bouncy Bumpers)
+    () => {
+      const bumperColors = [0xff6b9d, 0xa29bfe, 0x48dbfb, 0xfeca57];
+      const positions = [
+        [0, -2],
+        [-2.4, 0.5],
+        [2.4, 0.5],
+        [-1.3, 3.5],
+        [1.3, 3.5]
+      ];
+      positions.forEach(([x, z], i) => {
+        if (isFarEnough(x, z, 1.4)) {
+          addBumperCylinder(0.7, 0.6, x, z, bumperColors[i % bumperColors.length]);
+        }
+      });
+      addObstacleBox(2.4, 0.75, 0.6, -3.6, 0.35, 1.5, Math.PI / 4, obstacleMat);
+      addObstacleBox(2.4, 0.75, 0.6, 3.6, 0.35, -0.5, -Math.PI / 4, obstacleMat);
+    },
+
+    // 1: Zig-Zag Slalom (Bank Shot Challenge)
+    () => {
+      const side = Math.random() > 0.5 ? 1 : -1;
+      addObstacleBox(4.5, 0.75, 0.6, side * 1.8, 0.35, 3.2, 0, obstacleMat);
+      addObstacleBox(4.5, 0.75, 0.6, -side * 1.8, 0.35, -0.4, 0, obstacleMat);
+      addObstacleBox(4.0, 0.75, 0.6, side * 1.6, 0.35, -3.8, 0, obstacleMat);
+      if (isFarEnough(-side * 2.8, -6.2, 1.4)) {
+        addBumperCylinder(0.65, 0.6, -side * 2.8, -6.2, 0xff6b9d);
+      }
+    },
+
+    // 2: Diamond Fortress
+    () => {
+      addObstacleBox(2.6, 0.75, 0.6, -1.2, 0.35, 0.2, Math.PI / 4, obstacleMat);
+      addObstacleBox(2.6, 0.75, 0.6, 1.2, 0.35, 0.2, -Math.PI / 4, obstacleMat);
+      addObstacleBox(2.6, 0.75, 0.6, -1.2, 0.35, -1.8, -Math.PI / 4, obstacleMat);
+      addObstacleBox(2.6, 0.75, 0.6, 1.2, 0.35, -1.8, Math.PI / 4, obstacleMat);
+      if (isFarEnough(-3.0, 2.5, 1.4)) addBumperCylinder(0.65, 0.6, -3.0, 2.5, 0x48dbfb);
+      if (isFarEnough(3.0, 2.5, 1.4)) addBumperCylinder(0.65, 0.6, 3.0, 2.5, 0xfeca57);
+    },
+
+    // 3: Twin Chute & Outer Mazes
+    () => {
+      addObstacleBox(0.6, 0.75, 5.5, 0, 0.35, 0.5, 0, obstacleMat);
+      addObstacleBox(3.0, 0.75, 0.6, -3.2, 0.35, 3.8, -0.35, obstacleMat);
+      addObstacleBox(3.0, 0.75, 0.6, 3.2, 0.35, 3.8, 0.35, obstacleMat);
+      if (isFarEnough(-2.2, -3.2, 1.4)) addBumperCylinder(0.7, 0.6, -2.2, -3.2, 0xff6b9d);
+      if (isFarEnough(2.2, -3.2, 1.4)) addBumperCylinder(0.7, 0.6, 2.2, -3.2, 0xa29bfe);
+    },
+
+    // 4: Bank Ramps & Bumpers
+    () => {
+      addObstacleBox(3.2, 0.75, 0.6, -2.8, 0.35, 3.0, 0.45, obstacleMat);
+      addObstacleBox(3.2, 0.75, 0.6, 2.8, 0.35, 0.0, -0.45, obstacleMat);
+      addObstacleBox(3.2, 0.75, 0.6, -2.5, 0.35, -3.0, 0.45, obstacleMat);
+      if (isFarEnough(1.5, -2.5, 1.4)) addBumperCylinder(0.75, 0.6, 1.5, -2.5, 0xfeca57);
+      if (isFarEnough(0, 1.5, 1.4)) addBumperCylinder(0.75, 0.6, 0, 1.5, 0x48dbfb);
+    }
+  ];
+
+  const chosen = (archetypeIndex >= 0 && archetypeIndex < archetypes.length)
+    ? archetypeIndex
+    : Math.floor(Math.random() * archetypes.length);
+
+  archetypes[chosen]();
+}
+
+// =============================================
+//  DYNAMIC HOLE & TEE POSITIONING
+// =============================================
+const holePos = new THREE.Vector3(0, 0.02, -8);
+const teePos = new THREE.Vector3(0, 0.22, 8);
 
 // --- Hole ---
 const holeRadius = 0.45;
@@ -207,7 +359,7 @@ const holeMesh = new THREE.Mesh(
   new THREE.CylinderGeometry(holeRadius, holeRadius, 0.08, 32),
   holeDarkMat
 );
-holeMesh.position.set(0, 0.02, -8);
+holeMesh.position.set(holePos.x, 0.02, holePos.z);
 holeMesh.receiveShadow = true;
 scene.add(holeMesh);
 
@@ -216,12 +368,12 @@ const ringMesh = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4, side: THREE.DoubleSide })
 );
 ringMesh.rotation.x = -Math.PI / 2;
-ringMesh.position.set(0, 0.04, -8);
+ringMesh.position.set(holePos.x, 0.04, holePos.z);
 scene.add(ringMesh);
 
 const holeBody = new CANNON.Body({
   mass: 0,
-  position: new CANNON.Vec3(0, -0.3, -8),
+  position: new CANNON.Vec3(holePos.x, -0.3, holePos.z),
   shape: new CANNON.Sphere(holeRadius * 0.7),
   isTrigger: true
 });
@@ -243,8 +395,46 @@ const flagMeshObj = new THREE.Mesh(flagShapeGeo, flagClothMat);
 flagMeshObj.position.set(0.04, 2.3, 0);
 flagMeshObj.castShadow = true;
 flagGroup.add(flagMeshObj);
-flagGroup.position.set(0, 0, -8);
+flagGroup.position.set(holePos.x, 0, holePos.z);
 scene.add(flagGroup);
+
+function setRandomHoleAndTee(randomizeTee = true) {
+  // Green zone: X in [-3.2, 3.2], Z in [-9.2, -5.5] (safe margin from walls)
+  const hx = Number(((Math.random() * 6.4) - 3.2).toFixed(2));
+  const hz = Number(((Math.random() * 3.7) - 9.2).toFixed(2));
+  holePos.set(hx, 0.02, hz);
+
+  if (randomizeTee) {
+    const tx = Number(((Math.random() * 3.6) - 1.8).toFixed(2));
+    const tz = Number(((Math.random() * 1.5) + 7.5).toFixed(2));
+    teePos.set(tx, 0.22, tz);
+  } else {
+    teePos.set(0, 0.22, 8);
+  }
+
+  // Update hole & flag meshes and physics trigger
+  holeMesh.position.set(holePos.x, 0.02, holePos.z);
+  ringMesh.position.set(holePos.x, 0.04, holePos.z);
+  holeBody.position.set(holePos.x, -0.3, holePos.z);
+  flagGroup.position.set(holePos.x, 0, holePos.z);
+
+  // Position ball at tee
+  ballStartPos.set(teePos.x, 0.4, teePos.z);
+  ballBody.position.copy(ballStartPos);
+  ballBody.velocity.set(0, 0, 0);
+  ballBody.angularVelocity.set(0, 0, 0);
+  ballMesh.position.copy(ballStartPos);
+
+  // Generate dynamic course layout with obstacle clearance around tee & hole
+  generateCourseLayout();
+
+  // Re-orient character toward the hole
+  charStandPos.set(teePos.x, 0, teePos.z + 1.2);
+  if (charGroup) {
+    charGroup.position.copy(charStandPos);
+    charGroup.lookAt(holePos.x, 0, holePos.z);
+  }
+}
 
 // =============================================
 //  DECORATIONS
@@ -366,12 +556,12 @@ scene.add(ballMesh);
 
 const ballStartPos = new CANNON.Vec3(0, 1, 8);
 const ballBody = new CANNON.Body({
-  mass: 0.045,
+  mass: 0.03,
   position: ballStartPos.clone(),
   shape: new CANNON.Sphere(ballRadius),
   material: ballPhysMat,
-  linearDamping: 0.35,
-  angularDamping: 0.4
+  linearDamping: 0.55,
+  angularDamping: 0.7
 });
 world.addBody(ballBody);
 objectsToUpdate.push({ mesh: ballMesh, body: ballBody });
@@ -758,6 +948,11 @@ function startGame(charKey) {
   if (navChangeCharBtn) navChangeCharBtn.style.display = 'inline-flex';
   charIndicatorEl.textContent = `Playing as ${selectedChar.emoji} ${selectedChar.name}`;
 
+  strokes = 0;
+  totalStrokes = 0;
+  currentHoleNumber = 1;
+  updateScoreDisplay();
+
   // Remove old character if restarting
   if (charGroup) {
     scene.remove(charGroup);
@@ -766,10 +961,8 @@ function startGame(charKey) {
 
   charGroup = createCharModel(charKey);
 
-  // Place character at start position behind ball
-  charStandPos.set(0, 0, 9.2);
-  charGroup.position.copy(charStandPos);
-  charGroup.lookAt(0, 0, -8);
+  // Generate random hole layout on game start
+  setRandomHoleAndTee(true);
 
   gameStarted = true;
   camera.position.set(0, 12, 18);
@@ -859,7 +1052,7 @@ function endAim(cx, cy) {
 
     if (dist > 5) {
       strokes++;
-      scoreEl.textContent = strokes;
+      updateScoreDisplay();
       sfxSwing(aimPower);
 
       // Trigger putting swing animation on taco de golfe
@@ -907,7 +1100,10 @@ function triggerHoleSink() {
   ballBody.velocity.set(0, 0, 0);
   ballBody.angularVelocity.set(0, 0, 0);
   ballBody.sleep();
-  ballMesh.position.set(0, -0.15, -8);
+  ballMesh.position.set(holePos.x, -0.15, holePos.z);
+
+  totalStrokes += strokes;
+  updateScoreDisplay();
 
   setTimeout(() => {
     ballMesh.visible = false;
@@ -927,8 +1123,11 @@ function triggerHoleSink() {
 world.addEventListener('beginContact', (e) => {
   const a = e.bodyA, b = e.bodyB;
   if (a === ballBody || b === ballBody) {
-    if (ballBody.velocity.length() > 0.4) {
-      sfxBounce();
+    const other = a === ballBody ? b : a;
+    const speed = ballBody.velocity.length();
+    if (speed > 0.25) {
+      const intensity = Math.min(speed / 7, 1.4);
+      sfxBounce(intensity);
     }
   }
 });
@@ -936,43 +1135,45 @@ world.addEventListener('beginContact', (e) => {
 // =============================================
 //  RESET & PLAY AGAIN
 // =============================================
-function resetGameState() {
+function resetGameState(fullReset = true) {
   inHole = false;
   isBallMoving = false;
   strokes = 0;
-  scoreEl.textContent = '0';
+  if (fullReset) {
+    totalStrokes = 0;
+    currentHoleNumber = 1;
+  }
+  updateScoreDisplay();
   messageEl.style.display = 'none';
   messageEl.className = '';
   if (endActionsContainer) endActionsContainer.style.display = 'none';
   aimHintEl.style.display = 'block';
 
-  // Reset ball
-  ballBody.position.copy(ballStartPos);
-  ballBody.velocity.set(0, 0, 0);
-  ballBody.angularVelocity.set(0, 0, 0);
-  ballBody.wakeUp();
+  // Generate new randomized hole & tee & obstacle layout
+  setRandomHoleAndTee(true);
   ballMesh.visible = true;
-
-  // Reset character position
-  charStandPos.set(0, 0, 9.2);
-  if (charGroup) {
-    charGroup.position.copy(charStandPos);
-    charGroup.lookAt(0, 0, -8);
-  }
 
   // Reset camera
   camera.position.set(0, 12, 18);
   camera.lookAt(0, 0, 0);
 }
 
+if (nextHoleBtn) {
+  nextHoleBtn.addEventListener('click', () => {
+    sfxClick();
+    currentHoleNumber++;
+    resetGameState(false);
+  });
+}
+
 playAgainBtn.addEventListener('click', () => {
   sfxClick();
-  resetGameState();
+  resetGameState(true);
 });
 
 function openCharacterSelect() {
   sfxClick();
-  resetGameState();
+  resetGameState(true);
   gameStarted = false;
   gameUiEl.style.display = 'none';
   if (navChangeCharBtn) navChangeCharBtn.style.display = 'none';
@@ -991,7 +1192,7 @@ function resetBall() {
   ballBody.angularVelocity.set(0, 0, 0);
   ballBody.wakeUp();
   isBallMoving = false;
-  charStandPos.set(0, 0, 9.2);
+  charStandPos.set(teePos.x, 0, teePos.z + 1.2);
 }
 
 // =============================================
@@ -1024,18 +1225,16 @@ function tick() {
     }
   }
 
-  // HOLE DETECTION: Check if ball enters hole cup (0, 0, -8)
-  const HOLE_X = 0;
-  const HOLE_Z = -8;
+  // HOLE DETECTION: Check if ball enters hole cup
   const HOLE_RADIUS = 0.52;
-  const distToHole = Math.hypot(ballMesh.position.x - HOLE_X, ballMesh.position.z - HOLE_Z);
+  const distToHole = Math.hypot(ballMesh.position.x - holePos.x, ballMesh.position.z - holePos.z);
 
   if (!inHole && gameStarted) {
     // Gravitational suction when rolling near the hole rim
     if (distToHole < HOLE_RADIUS * 1.4) {
       const pull = 10.0;
-      ballBody.velocity.x += (HOLE_X - ballMesh.position.x) * pull * dt;
-      ballBody.velocity.z += (HOLE_Z - ballMesh.position.z) * pull * dt;
+      ballBody.velocity.x += (holePos.x - ballMesh.position.x) * pull * dt;
+      ballBody.velocity.z += (holePos.z - ballMesh.position.z) * pull * dt;
       ballBody.velocity.y -= 14.0 * dt;
 
       // When ball drops inside the cup perimeter
@@ -1045,10 +1244,22 @@ function tick() {
     }
   }
 
-  // Ball stopped check — character walks to ball when it stops
+  // Ball stopped check — ping-pong ball snappy deceleration and decisive stop
   if (isBallMoving && !inHole) {
     const vel = ballBody.velocity;
-    if (vel.x * vel.x + vel.y * vel.y + vel.z * vel.z < 0.008) {
+    const horizontalSpeedSq = vel.x * vel.x + vel.z * vel.z;
+    const totalSpeedSq = horizontalSpeedSq + vel.y * vel.y;
+
+    // Ping-pong style air/surface braking when ball slows down
+    if (totalSpeedSq < 2.2) { // speed < ~1.5 m/s
+      const brakeFactor = Math.max(0, 1 - 4.5 * dt);
+      ballBody.velocity.x *= brakeFactor;
+      ballBody.velocity.z *= brakeFactor;
+      ballBody.angularVelocity.scale(brakeFactor, ballBody.angularVelocity);
+    }
+
+    // Snappy stop cutoff — stops immediately without dragging
+    if (totalSpeedSq < 0.12 || (horizontalSpeedSq < 0.08 && Math.abs(vel.y) < 0.15)) {
       ballBody.velocity.set(0, 0, 0);
       ballBody.angularVelocity.set(0, 0, 0);
       ballBody.sleep();
