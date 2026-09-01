@@ -458,76 +458,103 @@ function addLoopChute(px, pz, angle = 0, radius = 1.8) {
 function addElevatedTerrace(px, py, pz, sx, sz, rampX, rampZ, rampLength, rampWidth, isHoleOnTerrace = true) {
   currentTerraceHeight = py;
 
-  // 1. Lush Green Putting Deck on top (same material as course fairway!)
-  const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.15, sz), courseMat);
-  deckMesh.position.set(px, py - 0.075, pz);
+  // 1. Single Solid Lush Green Putting Deck (From Y=-0.1 up to Y=py, eliminating any Z-fighting)
+  const totalDeckHeight = py + 0.1;
+  const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(sx, totalDeckHeight, sz), courseMat);
+  deckMesh.position.set(px, (py - 0.1) / 2, pz);
   deckMesh.castShadow = true;
   deckMesh.receiveShadow = true;
   scene.add(deckMesh);
 
   const deckBody = new CANNON.Body({
     mass: 0,
-    position: new CANNON.Vec3(px, py - 0.075, pz),
-    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, 0.075, sz / 2)),
+    position: new CANNON.Vec3(px, (py - 0.1) / 2, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, totalDeckHeight / 2, sz / 2)),
     material: groundPhysMat
   });
   world.addBody(deckBody);
   currentObstacleObjects.push({ mesh: deckMesh, body: deckBody });
 
-  // 2. Clean wooden foundation base underneath (recessed, from Y=0 to Y=py-0.15)
-  if (py > 0.15) {
-    const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.99, py - 0.15, sz * 0.99), terraceWallMat);
-    baseMesh.position.set(px, (py - 0.15) / 2, pz);
-    baseMesh.castShadow = true;
-    scene.add(baseMesh);
-    currentObstacleObjects.push({ mesh: baseMesh });
-  }
-
-  // 3. Cute wooden perimeter safety rails around left, right, and back of the terrace
+  // 2. Cute Wooden Perimeter Safety Rails (Left, Right, Back)
   // Left wall
-  const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, sz), wallMat);
-  leftRail.position.set(px - sx / 2 + 0.15, py + 0.12, pz);
+  const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.45, sz), wallMat);
+  leftRail.position.set(px - sx / 2 + 0.15, py + 0.15, pz);
   scene.add(leftRail);
   const leftBody = new CANNON.Body({
     mass: 0,
-    position: new CANNON.Vec3(px - sx / 2 + 0.15, py + 0.12, pz),
-    shape: new CANNON.Box(new CANNON.Vec3(0.15, 0.2, sz / 2)),
+    position: new CANNON.Vec3(px - sx / 2 + 0.15, py + 0.15, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(0.15, 0.225, sz / 2)),
     material: wallPhysMat
   });
   world.addBody(leftBody);
   currentObstacleObjects.push({ mesh: leftRail, body: leftBody });
 
   // Right wall
-  const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, sz), wallMat);
-  rightRail.position.set(px + sx / 2 - 0.15, py + 0.12, pz);
+  const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.45, sz), wallMat);
+  rightRail.position.set(px + sx / 2 - 0.15, py + 0.15, pz);
   scene.add(rightRail);
   const rightBody = new CANNON.Body({
     mass: 0,
-    position: new CANNON.Vec3(px + sx / 2 - 0.15, py + 0.12, pz),
-    shape: new CANNON.Box(new CANNON.Vec3(0.15, 0.2, sz / 2)),
+    position: new CANNON.Vec3(px + sx / 2 - 0.15, py + 0.15, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(0.15, 0.225, sz / 2)),
     material: wallPhysMat
   });
   world.addBody(rightBody);
   currentObstacleObjects.push({ mesh: rightRail, body: rightBody });
 
   // Back wall
-  const backRail = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.4, 0.3), wallMat);
-  backRail.position.set(px, py + 0.12, pz - sz / 2 + 0.15);
+  const backRail = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.45, 0.3), wallMat);
+  backRail.position.set(px, py + 0.15, pz - sz / 2 + 0.15);
   scene.add(backRail);
   const backBody = new CANNON.Body({
     mass: 0,
-    position: new CANNON.Vec3(px, py + 0.12, pz - sz / 2 + 0.15),
-    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, 0.2, 0.15)),
+    position: new CANNON.Vec3(px, py + 0.15, pz - sz / 2 + 0.15),
+    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, 0.225, 0.15)),
     material: wallPhysMat
   });
   world.addBody(backBody);
   currentObstacleObjects.push({ mesh: backRail, body: backBody });
 
-  // 4. Sloped fairway ramp connecting lower fairway to upper terrace
-  const incline = Math.atan2(py, rampLength);
-  const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampWidth, 0.1, Math.hypot(py, rampLength)), courseMat);
+  // 3. Wooden Front Retaining Facade (Flanking the ramp entrance)
+  const frontZ = pz + sz / 2;
+  const leftWallWidth = Math.max(0.1, (rampX - rampWidth / 2) - (px - sx / 2));
+  if (leftWallWidth > 0.3) {
+    const leftFrontMesh = new THREE.Mesh(new THREE.BoxGeometry(leftWallWidth, py + 0.35, 0.35), wallMat);
+    leftFrontMesh.position.set((px - sx / 2 + rampX - rampWidth / 2) / 2, (py + 0.35) / 2 - 0.05, frontZ);
+    leftFrontMesh.castShadow = true;
+    scene.add(leftFrontMesh);
+    const leftFrontBody = new CANNON.Body({
+      mass: 0,
+      position: new CANNON.Vec3((px - sx / 2 + rampX - rampWidth / 2) / 2, (py + 0.35) / 2 - 0.05, frontZ),
+      shape: new CANNON.Box(new CANNON.Vec3(leftWallWidth / 2, (py + 0.35) / 2, 0.175)),
+      material: wallPhysMat
+    });
+    world.addBody(leftFrontBody);
+    currentObstacleObjects.push({ mesh: leftFrontMesh, body: leftFrontBody });
+  }
+
+  const rightWallWidth = Math.max(0.1, (px + sx / 2) - (rampX + rampWidth / 2));
+  if (rightWallWidth > 0.3) {
+    const rightFrontMesh = new THREE.Mesh(new THREE.BoxGeometry(rightWallWidth, py + 0.35, 0.35), wallMat);
+    rightFrontMesh.position.set((rampX + rampWidth / 2 + px + sx / 2) / 2, (py + 0.35) / 2 - 0.05, frontZ);
+    rightFrontMesh.castShadow = true;
+    scene.add(rightFrontMesh);
+    const rightFrontBody = new CANNON.Body({
+      mass: 0,
+      position: new CANNON.Vec3((rampX + rampWidth / 2 + px + sx / 2) / 2, (py + 0.35) / 2 - 0.05, frontZ),
+      shape: new CANNON.Box(new CANNON.Vec3(rightWallWidth / 2, (py + 0.35) / 2, 0.175)),
+      material: wallPhysMat
+    });
+    world.addBody(rightFrontBody);
+    currentObstacleObjects.push({ mesh: rightFrontMesh, body: rightFrontBody });
+  }
+
+  // 4. Sloped Fairway Ramp (Smooth upward slope from lower fairway Y=0 to terrace Y=py)
+  const inclineAngle = -Math.atan2(py, rampLength); // Negative so -Z rises to terrace Y=py
+  const rampHypot = Math.hypot(py, rampLength);
+  const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampWidth, 0.12, rampHypot), courseMat);
   rampMesh.position.set(rampX, py / 2, rampZ);
-  rampMesh.rotation.x = incline;
+  rampMesh.rotation.x = inclineAngle;
   rampMesh.castShadow = true;
   rampMesh.receiveShadow = true;
   scene.add(rampMesh);
@@ -535,32 +562,32 @@ function addElevatedTerrace(px, py, pz, sx, sz, rampX, rampZ, rampLength, rampWi
   const rampBody = new CANNON.Body({
     mass: 0,
     position: new CANNON.Vec3(rampX, py / 2, rampZ),
-    shape: new CANNON.Box(new CANNON.Vec3(rampWidth / 2, 0.05, Math.hypot(py, rampLength) / 2)),
+    shape: new CANNON.Box(new CANNON.Vec3(rampWidth / 2, 0.06, rampHypot / 2)),
     material: groundPhysMat
   });
-  rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), incline);
+  rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), inclineAngle);
   world.addBody(rampBody);
   currentObstacleObjects.push({ mesh: rampMesh, body: rampBody });
 
-  // Ramp side safety rails
+  // Ramp Side Rails (Wooden bumpers matching incline)
   [-rampWidth / 2 - 0.1, rampWidth / 2 + 0.1].forEach(xOff => {
-    const rRail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, Math.hypot(py, rampLength)), wallMat);
+    const rRail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.38, rampHypot), wallMat);
     rRail.position.set(rampX + xOff, py / 2 + 0.12, rampZ);
-    rRail.rotation.x = incline;
+    rRail.rotation.x = inclineAngle;
     scene.add(rRail);
 
     const rBody = new CANNON.Body({
       mass: 0,
       position: new CANNON.Vec3(rampX + xOff, py / 2 + 0.12, rampZ),
-      shape: new CANNON.Box(new CANNON.Vec3(0.09, 0.175, Math.hypot(py, rampLength) / 2)),
+      shape: new CANNON.Box(new CANNON.Vec3(0.1, 0.19, rampHypot / 2)),
       material: wallPhysMat
     });
-    rBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), incline);
+    rBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), inclineAngle);
     world.addBody(rBody);
     currentObstacleObjects.push({ mesh: rRail, body: rBody });
   });
 
-  // 5. If hole is on this terrace, elevate the hole, ring, and flag to match terrace deck height!
+  // 5. If hole is on this terrace, elevate the hole cup, ring, and flag to match terrace deck height!
   if (isHoleOnTerrace) {
     holePos.y = py + 0.02;
     holeMesh.position.set(holePos.x, holePos.y, holePos.z);
@@ -617,9 +644,9 @@ function generateCourseLayout(archetypeIndex = -1) {
 
     // 3: 2-Tier Castle (Sloped Ramp to Elevated Green Terrace)
     () => {
-      // Clean elevated putting green terrace where hole sits with sloped ramp
-      addElevatedTerrace(0, 0.85, -7.5, 9.6, 6.2, 0, -2.0, 5.0, 3.2, true);
-      // Bumpers guarding the outer sides
+      // Clean elevated green putting terrace with seamless ascent ramp
+      addElevatedTerrace(0, 0.8, -7.5, 9.6, 6.4, 0, -1.9, 4.8, 3.6, true);
+      // Bumpers guarding the sides
       if (isFarEnough(-3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, -3.2, 2.5, 0x48dbfb);
       if (isFarEnough(3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, 3.2, 2.5, 0xff6b9d);
       if (isFarEnough(0, 4.8, 1.5)) addSpeedBooster(0, 4.8, 1.8, 2.5, 0, -1, 24.0);
@@ -644,11 +671,11 @@ function generateCourseLayout(archetypeIndex = -1) {
 
     // 6: Double-Deck Terrace Bridge & Drop Funnel
     () => {
-      // Elevated bridge in fairway with speed boost, dropping down to lower green
-      addElevatedTerrace(0, 0.85, 0.5, 4.2, 5.0, 0, 4.5, 3.0, 3.2, false);
-      if (isFarEnough(0, 0.5, 1.4)) addSpeedBooster(0, 0.5, 1.6, 2.8, 0, -1, 26.0);
-      if (isFarEnough(-2.8, 0.5, 1.4)) addSpikeTrap(-2.8, 0.5, 0.8, 5);
-      if (isFarEnough(2.8, 0.5, 1.4)) addSpikeTrap(2.8, 0.5, 0.8, 5);
+      // Elevated fairway bridge with speed boost, dropping down to lower green
+      addElevatedTerrace(0, 0.8, 0, 4.2, 4.5, 0, 3.8, 3.2, 3.6, false);
+      if (isFarEnough(0, 0, 1.4)) addSpeedBooster(0, 0, 1.6, 2.6, 0, -1, 26.0);
+      if (isFarEnough(-2.8, 0, 1.4)) addSpikeTrap(-2.8, 0, 0.8, 5);
+      if (isFarEnough(2.8, 0, 1.4)) addSpikeTrap(2.8, 0, 0.8, 5);
       if (isFarEnough(0, -4.5, 1.4)) addBumperCylinder(0.7, 0.6, 0, -4.5, 0xff6b9d);
     }
   ];
