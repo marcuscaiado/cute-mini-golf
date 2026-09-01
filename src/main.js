@@ -1,7 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { sfxSwing, sfxBounce, sfxHoleSink, sfxVictory, sfxClick, sfxSelect } from './audio.js';
+import { sfxSwing, sfxBounce, sfxHoleSink, sfxVictory, sfxClick, sfxSelect, sfxBoost, sfxBallBreak, sfxLoop, sfxRespawn } from './audio.js';
 
 // =============================================
 //  CUTE MINI GOLF 3D
@@ -19,7 +19,20 @@ let aimPower = 0;
 let isBallMoving = false;
 let inHole = false;
 let gameStarted = false;
+let isBallBroken = false;
+let lastShotPos = new THREE.Vector3(0, 0.22, 8);
 let charStandPos = new THREE.Vector3(0, 0, 9.2); // Where the character stands
+
+// --- Dynamic Obstacle & Hazard Registries ---
+let currentObstacleObjects = [];
+let activeBoosters = [];
+let activeSpikes = [];
+let activeLoops = [];
+let activeFragments = [];
+let lastBoostSfxTime = 0;
+let inLoopAnimation = false;
+let loopAnimProgress = 0;
+let currentLoopObj = null;
 
 // --- DOM ---
 const charSelectEl = document.getElementById('char-select');
@@ -163,6 +176,18 @@ const flagPoleMat = new THREE.MeshStandardMaterial({ color: '#e0e0e0', roughness
 const flagClothMat = new THREE.MeshStandardMaterial({ color: '#ff6b9d', roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide });
 const waterMat = new THREE.MeshStandardMaterial({ color: '#4fc3f7', roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.7 });
 
+// --- NEW INTERACTIVE OBSTACLE MATERIALS ---
+const boosterBorderMat = new THREE.MeshStandardMaterial({ color: '#2d3436', roughness: 0.35, metalness: 0.7 });
+const boosterArrowMat = new THREE.MeshStandardMaterial({ color: '#00f5ff', roughness: 0.2, emissive: '#00f5ff', emissiveIntensity: 0.9 });
+const spikePlateMat = new THREE.MeshStandardMaterial({ color: '#1e272e', roughness: 0.4, metalness: 0.8 });
+const spikeConeMat = new THREE.MeshStandardMaterial({ color: '#ff3838', roughness: 0.25, emissive: '#c0392b', emissiveIntensity: 0.8 });
+const loopNeonMat = new THREE.MeshStandardMaterial({ color: '#6c5ce7', roughness: 0.3, emissive: '#a29bfe', emissiveIntensity: 0.5 });
+const loopRingMat = new THREE.MeshStandardMaterial({ color: '#fd79a8', roughness: 0.2, emissive: '#fd79a8', emissiveIntensity: 0.85 });
+const terraceMat = new THREE.MeshStandardMaterial({ color: '#78e08f', roughness: 0.85 });
+const terraceWallMat = new THREE.MeshStandardMaterial({ color: '#e17055', roughness: 0.7 });
+const rampMat = new THREE.MeshStandardMaterial({ color: '#55efc4', roughness: 0.7 });
+const shardMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.15, metalness: 0.1 });
+
 // =============================================
 //  LEVEL BUILDER
 // =============================================
@@ -184,7 +209,7 @@ function createStaticBox(sx, sy, sz, px, py, pz, material, physMat = groundPhysM
 }
 
 // =============================================
-//  BUILD THE COURSE
+//  BUILD THE BASE COURSE
 // =============================================
 createStaticBox(10, 0.5, 22, 0, -0.25, 0, courseMat, groundPhysMat);
 createStaticBox(11.2, 0.3, 23.2, 0, -0.45, 0, courseEdgeMat, groundPhysMat);
@@ -195,10 +220,8 @@ createStaticBox(0.6, 1.2, 22, -5.3, 0.35, 0, wallMat, wallPhysMat);
 createStaticBox(0.6, 1.2, 22, 5.3, 0.35, 0, wallMat, wallPhysMat);
 
 // =============================================
-//  DYNAMIC PROCEDURAL OBSTACLE GENERATOR
+//  DYNAMIC PROCEDURAL OBSTACLE BUILDERS
 // =============================================
-let currentObstacleObjects = [];
-
 function clearObstacles() {
   for (const obs of currentObstacleObjects) {
     if (obs.mesh) {
@@ -210,6 +233,13 @@ function clearObstacles() {
     }
   }
   currentObstacleObjects = [];
+  activeBoosters = [];
+  activeSpikes = [];
+  activeLoops = [];
+  for (const f of activeFragments) {
+    if (f.mesh) scene.remove(f.mesh);
+  }
+  activeFragments = [];
 }
 
 function addObstacleBox(sx, sy, sz, px, py, pz, rotY = 0, material = obstacleMat) {
@@ -271,72 +301,291 @@ function addBumperCylinder(radius, height, px, pz, colorHex = 0xff6b9d) {
   return { mesh: group, body };
 }
 
+/** SPEED BOOSTER / CONVEYOR BELT (Esteira Aceleradora) */
+function addSpeedBooster(px, pz, width = 1.8, length = 3.2, dirX = 0, dirZ = -1, power = 24.0) {
+  const group = new THREE.Group();
+
+  // Dark metallic bezel
+  const bezel = new THREE.Mesh(
+    new THREE.BoxGeometry(width, 0.04, length),
+    boosterBorderMat
+  );
+  bezel.position.y = 0.02;
+  bezel.receiveShadow = true;
+  group.add(bezel);
+
+  // Conveyor surface strip
+  const surface = new THREE.Mesh(
+    new THREE.PlaneGeometry(width * 0.88, length * 0.94),
+    new THREE.MeshStandardMaterial({ color: '#0984e3', roughness: 0.4 })
+  );
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = 0.042;
+  group.add(surface);
+
+  // 3 Animated Glowing Chevron Arrows
+  const arrows = [];
+  const arrowSpacing = length / 4;
+  for (let i = -1; i <= 1; i++) {
+    const arrowGroup = new THREE.Group();
+    const l1 = new THREE.Mesh(new THREE.BoxGeometry(width * 0.32, 0.02, 0.12), boosterArrowMat);
+    l1.position.set(-width * 0.12, 0, -0.06 * (dirZ < 0 ? 1 : -1));
+    l1.rotation.y = (dirZ < 0 ? 1 : -1) * (Math.PI / 4);
+
+    const l2 = new THREE.Mesh(new THREE.BoxGeometry(width * 0.32, 0.02, 0.12), boosterArrowMat);
+    l2.position.set(width * 0.12, 0, -0.06 * (dirZ < 0 ? 1 : -1));
+    l2.rotation.y = -(dirZ < 0 ? 1 : -1) * (Math.PI / 4);
+
+    arrowGroup.add(l1);
+    arrowGroup.add(l2);
+    arrowGroup.position.set(0, 0.05, i * arrowSpacing);
+    group.add(arrowGroup);
+    arrows.push(arrowGroup);
+  }
+
+  group.position.set(px, 0, pz);
+  scene.add(group);
+
+  const boosterData = { px, pz, width, length, dirX, dirZ, power, mesh: group, arrows };
+  activeBoosters.push(boosterData);
+  currentObstacleObjects.push({ mesh: group });
+  return boosterData;
+}
+
+/** SPIKE HAZARD TRAP (Espinhos Quebra-Bola) */
+function addSpikeTrap(px, pz, radius = 0.85, count = 5) {
+  const group = new THREE.Group();
+
+  // Dark hazard plate
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, 0.06, 8),
+    spikePlateMat
+  );
+  base.position.y = 0.03;
+  base.receiveShadow = true;
+  group.add(base);
+
+  // Warning ring
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 0.85, radius * 0.98, 8),
+    new THREE.MeshBasicMaterial({ color: '#ff7675', side: THREE.DoubleSide })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.065;
+  group.add(ring);
+
+  // Center + outer circle spike cones
+  const spikePositions = [[0, 0]];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    spikePositions.push([Math.cos(angle) * radius * 0.55, Math.sin(angle) * radius * 0.55]);
+  }
+
+  for (const [sx, sz] of spikePositions) {
+    const spike = new THREE.Mesh(
+      new THREE.ConeGeometry(0.12, 0.42, 6),
+      spikeConeMat
+    );
+    spike.position.set(sx, 0.22, sz);
+    spike.castShadow = true;
+    group.add(spike);
+  }
+
+  group.position.set(px, 0, pz);
+  scene.add(group);
+
+  const body = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px, 0.2, pz),
+    shape: new CANNON.Cylinder(radius * 0.8, radius * 0.8, 0.4, 8),
+    material: wallPhysMat
+  });
+  world.addBody(body);
+
+  const spikeData = { px, pz, radius, mesh: group, body };
+  activeSpikes.push(spikeData);
+  currentObstacleObjects.push({ mesh: group, body });
+  return spikeData;
+}
+
+/** 3D LOOP-DE-LOOP & SLINGSHOT CHUTE (Looping 3D) */
+function addLoopChute(px, pz, angle = 0, radius = 1.8) {
+  const group = new THREE.Group();
+
+  // Tubular 3D Half-Torus Loop Arch
+  const loopGeo = new THREE.TorusGeometry(radius, 0.18, 12, 36, Math.PI);
+  const loopMesh = new THREE.Mesh(loopGeo, loopNeonMat);
+  loopMesh.rotation.x = Math.PI / 2;
+  loopMesh.rotation.y = Math.PI / 2;
+  loopMesh.position.set(0, radius + 0.1, 0);
+  loopMesh.castShadow = true;
+  group.add(loopMesh);
+
+  // Glowing Entry & Exit Portals
+  const entryRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 20), loopRingMat);
+  entryRing.position.set(0, 0.4, radius);
+  group.add(entryRing);
+
+  const exitRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 20), loopRingMat);
+  exitRing.position.set(0, 0.4, -radius);
+  group.add(exitRing);
+
+  group.position.set(px, 0, pz);
+  group.rotation.y = angle;
+  scene.add(group);
+
+  const entryWorld = new THREE.Vector3(0, 0.2, radius).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(new THREE.Vector3(px, 0, pz));
+  const exitWorld = new THREE.Vector3(0, 0.2, -radius).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(new THREE.Vector3(px, 0, pz));
+
+  const loopData = { px, pz, radius, angle, entryPos: entryWorld, exitPos: exitWorld, mesh: group };
+  activeLoops.push(loopData);
+  currentObstacleObjects.push({ mesh: group });
+  return loopData;
+}
+
+/** 2-TIER ELEVATED TERRACE & SLOPED RAMP (Nível 2 Andares) */
+function addElevatedTerrace(px, py, pz, sx, sz, rampX, rampZ, rampLength, rampWidth) {
+  const group = new THREE.Group();
+
+  // 1. Upper green platform
+  const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.5, sz), terraceMat);
+  deckMesh.position.set(px, py - 0.25, pz);
+  deckMesh.castShadow = true;
+  deckMesh.receiveShadow = true;
+  scene.add(deckMesh);
+
+  const deckBody = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px, py - 0.25, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(sx / 2, 0.25, sz / 2)),
+    material: groundPhysMat
+  });
+  world.addBody(deckBody);
+  currentObstacleObjects.push({ mesh: deckMesh, body: deckBody });
+
+  // 2. Wooden retaining facade
+  const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(sx + 0.1, py, sz + 0.1), terraceWallMat);
+  wallMesh.position.set(px, py / 2, pz);
+  wallMesh.castShadow = true;
+  scene.add(wallMesh);
+  currentObstacleObjects.push({ mesh: wallMesh });
+
+  // 3. Sloped fairway ramp connecting ground (Y=0) to terrace (Y=py)
+  const incline = Math.atan2(py, rampLength);
+  const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampWidth, 0.12, Math.hypot(py, rampLength)), rampMat);
+  rampMesh.position.set(rampX, py / 2, rampZ);
+  rampMesh.rotation.x = incline;
+  rampMesh.castShadow = true;
+  rampMesh.receiveShadow = true;
+  scene.add(rampMesh);
+
+  const rampBody = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(rampX, py / 2, rampZ),
+    shape: new CANNON.Box(new CANNON.Vec3(rampWidth / 2, 0.06, Math.hypot(py, rampLength) / 2)),
+    material: groundPhysMat
+  });
+  rampBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), incline);
+  world.addBody(rampBody);
+  currentObstacleObjects.push({ mesh: rampMesh, body: rampBody });
+
+  // 4. Side Guide Rails on Ramp
+  [-rampWidth / 2 - 0.15, rampWidth / 2 + 0.15].forEach(xOff => {
+    const railMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, Math.hypot(py, rampLength)), wallMat);
+    railMesh.position.set(rampX + xOff, py / 2 + 0.15, rampZ);
+    railMesh.rotation.x = incline;
+    scene.add(railMesh);
+
+    const railBody = new CANNON.Body({
+      mass: 0,
+      position: new CANNON.Vec3(rampX + xOff, py / 2 + 0.15, rampZ),
+      shape: new CANNON.Box(new CANNON.Vec3(0.1, 0.2, Math.hypot(py, rampLength) / 2)),
+      material: wallPhysMat
+    });
+    railBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), incline);
+    world.addBody(railBody);
+    currentObstacleObjects.push({ mesh: railMesh, body: railBody });
+  });
+}
+
 function isFarEnough(x, z, minDist = 2.0) {
   if (Math.hypot(x - holePos.x, z - holePos.z) < minDist + 0.4) return false;
   if (Math.hypot(x - teePos.x, z - teePos.z) < minDist) return false;
   return true;
 }
 
+// =============================================
+//  EXPANDED PROCEDURAL ARCHETYPES (7 TOTAL)
+// =============================================
 function generateCourseLayout(archetypeIndex = -1) {
   clearObstacles();
 
   const archetypes = [
-    // 0: Pinball Alley (Round Bouncy Bumpers)
+    // 0: Pinball Bumper Alley
     () => {
       const bumperColors = [0xff6b9d, 0xa29bfe, 0x48dbfb, 0xfeca57];
-      const positions = [
-        [0, -2],
-        [-2.4, 0.5],
-        [2.4, 0.5],
-        [-1.3, 3.5],
-        [1.3, 3.5]
-      ];
+      const positions = [[0, -2], [-2.4, 0.5], [2.4, 0.5], [-1.3, 3.5], [1.3, 3.5]];
       positions.forEach(([x, z], i) => {
-        if (isFarEnough(x, z, 1.4)) {
-          addBumperCylinder(0.7, 0.6, x, z, bumperColors[i % bumperColors.length]);
-        }
+        if (isFarEnough(x, z, 1.4)) addBumperCylinder(0.7, 0.6, x, z, bumperColors[i % bumperColors.length]);
       });
       addObstacleBox(2.4, 0.75, 0.6, -3.6, 0.35, 1.5, Math.PI / 4, obstacleMat);
       addObstacleBox(2.4, 0.75, 0.6, 3.6, 0.35, -0.5, -Math.PI / 4, obstacleMat);
     },
 
-    // 1: Zig-Zag Slalom (Bank Shot Challenge)
+    // 1: Turbo Speedway (Speed Boosters & Banked Rails)
     () => {
-      const side = Math.random() > 0.5 ? 1 : -1;
-      addObstacleBox(4.5, 0.75, 0.6, side * 1.8, 0.35, 3.2, 0, obstacleMat);
-      addObstacleBox(4.5, 0.75, 0.6, -side * 1.8, 0.35, -0.4, 0, obstacleMat);
-      addObstacleBox(4.0, 0.75, 0.6, side * 1.6, 0.35, -3.8, 0, obstacleMat);
-      if (isFarEnough(-side * 2.8, -6.2, 1.4)) {
-        addBumperCylinder(0.65, 0.6, -side * 2.8, -6.2, 0xff6b9d);
-      }
+      if (isFarEnough(0, 3.5, 1.5)) addSpeedBooster(0, 3.5, 1.8, 3.2, 0, -1, 26.0);
+      if (isFarEnough(-1.8, -1.5, 1.5)) addSpeedBooster(-1.8, -1.5, 1.6, 2.8, 0.4, -0.9, 22.0);
+      if (isFarEnough(1.8, -1.5, 1.5)) addSpeedBooster(1.8, -1.5, 1.6, 2.8, -0.4, -0.9, 22.0);
+      addObstacleBox(3.5, 0.75, 0.6, -3.5, 0.35, 0.8, Math.PI / 3, obstacleMat);
+      addObstacleBox(3.5, 0.75, 0.6, 3.5, 0.35, 0.8, -Math.PI / 3, obstacleMat);
+      if (isFarEnough(0, -4.5, 1.4)) addBumperCylinder(0.75, 0.6, 0, -4.5, 0xfeca57);
     },
 
-    // 2: Diamond Fortress
+    // 2: Spike Gauntlet (Safe Bank Angles around Hazard Spikes)
     () => {
-      addObstacleBox(2.6, 0.75, 0.6, -1.2, 0.35, 0.2, Math.PI / 4, obstacleMat);
-      addObstacleBox(2.6, 0.75, 0.6, 1.2, 0.35, 0.2, -Math.PI / 4, obstacleMat);
-      addObstacleBox(2.6, 0.75, 0.6, -1.2, 0.35, -1.8, -Math.PI / 4, obstacleMat);
-      addObstacleBox(2.6, 0.75, 0.6, 1.2, 0.35, -1.8, Math.PI / 4, obstacleMat);
-      if (isFarEnough(-3.0, 2.5, 1.4)) addBumperCylinder(0.65, 0.6, -3.0, 2.5, 0x48dbfb);
-      if (isFarEnough(3.0, 2.5, 1.4)) addBumperCylinder(0.65, 0.6, 3.0, 2.5, 0xfeca57);
+      if (isFarEnough(0, 1.5, 1.4)) addSpikeTrap(0, 1.5, 0.85, 6);
+      if (isFarEnough(-2.2, -2.5, 1.4)) addSpikeTrap(-2.2, -2.5, 0.8, 5);
+      if (isFarEnough(2.2, -2.5, 1.4)) addSpikeTrap(2.2, -2.5, 0.8, 5);
+      // Bank rails providing safe ricochet shots around spikes
+      addObstacleBox(3.2, 0.75, 0.6, -3.8, 0.35, 3.2, 0.45, obstacleMat);
+      addObstacleBox(3.2, 0.75, 0.6, 3.8, 0.35, 3.2, -0.45, obstacleMat);
+      if (isFarEnough(0, 4.8, 1.4)) addSpeedBooster(0, 4.8, 1.6, 2.2, 0, -1, 20.0);
     },
 
-    // 3: Twin Chute & Outer Mazes
+    // 3: 2-Tier Castle (Sloped Ramp to Elevated Green Terrace)
     () => {
-      addObstacleBox(0.6, 0.75, 5.5, 0, 0.35, 0.5, 0, obstacleMat);
-      addObstacleBox(3.0, 0.75, 0.6, -3.2, 0.35, 3.8, -0.35, obstacleMat);
-      addObstacleBox(3.0, 0.75, 0.6, 3.2, 0.35, 3.8, 0.35, obstacleMat);
-      if (isFarEnough(-2.2, -3.2, 1.4)) addBumperCylinder(0.7, 0.6, -2.2, -3.2, 0xff6b9d);
-      if (isFarEnough(2.2, -3.2, 1.4)) addBumperCylinder(0.7, 0.6, 2.2, -3.2, 0xa29bfe);
+      // Elevated platform at top green where hole sits
+      addElevatedTerrace(0, 1.1, -7.5, 8.5, 6.5, 0, -1.5, 5.5, 2.8);
+      // Bumpers guarding the sides
+      if (isFarEnough(-3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, -3.2, 2.5, 0x48dbfb);
+      if (isFarEnough(3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, 3.2, 2.5, 0xff6b9d);
+      if (isFarEnough(0, 5.0, 1.5)) addSpeedBooster(0, 5.0, 1.8, 2.5, 0, -1, 22.0);
     },
 
-    // 4: Bank Ramps & Bumpers
+    // 4: 3D Looping Slingshot Chute
     () => {
-      addObstacleBox(3.2, 0.75, 0.6, -2.8, 0.35, 3.0, 0.45, obstacleMat);
-      addObstacleBox(3.2, 0.75, 0.6, 2.8, 0.35, 0.0, -0.45, obstacleMat);
-      addObstacleBox(3.2, 0.75, 0.6, -2.5, 0.35, -3.0, 0.45, obstacleMat);
-      if (isFarEnough(1.5, -2.5, 1.4)) addBumperCylinder(0.75, 0.6, 1.5, -2.5, 0xfeca57);
-      if (isFarEnough(0, 1.5, 1.4)) addBumperCylinder(0.75, 0.6, 0, 1.5, 0x48dbfb);
+      if (isFarEnough(0, 0, 1.8)) addLoopChute(0, 0, 0, 1.8);
+      if (isFarEnough(0, 4.2, 1.5)) addSpeedBooster(0, 4.2, 1.8, 3.0, 0, -1, 28.0);
+      addObstacleBox(3.0, 0.75, 0.6, -3.4, 0.35, -2.5, Math.PI / 4, obstacleMat);
+      addObstacleBox(3.0, 0.75, 0.6, 3.4, 0.35, -2.5, -Math.PI / 4, obstacleMat);
+    },
+
+    // 5: The Chaos Mixer (Boosters + Spikes + Bumpers)
+    () => {
+      if (isFarEnough(-1.8, 3.2, 1.4)) addSpeedBooster(-1.8, 3.2, 1.5, 2.6, 0.3, -1, 24.0);
+      if (isFarEnough(1.8, 3.2, 1.4)) addSpeedBooster(1.8, 3.2, 1.5, 2.6, -0.3, -1, 24.0);
+      if (isFarEnough(0, 0.5, 1.4)) addSpikeTrap(0, 0.5, 0.85, 6);
+      if (isFarEnough(-2.4, -2.8, 1.4)) addBumperCylinder(0.75, 0.6, -2.4, -2.8, 0xfeca57);
+      if (isFarEnough(2.4, -2.8, 1.4)) addBumperCylinder(0.75, 0.6, 2.4, -2.8, 0x48dbfb);
+    },
+
+    // 6: Double-Deck Terrace Bridge with Drop Funnel
+    () => {
+      addElevatedTerrace(0, 1.2, -6.5, 9.0, 7.0, -1.8, 0.5, 6.0, 2.4);
+      if (isFarEnough(2.2, 0.5, 1.4)) addSpeedBooster(2.2, 0.5, 1.6, 3.0, 0, -1, 22.0);
+      if (isFarEnough(2.2, -4.5, 1.4)) addSpikeTrap(2.2, -4.5, 0.8, 5);
+      if (isFarEnough(-2.8, 4.5, 1.4)) addBumperCylinder(0.7, 0.6, -2.8, 4.5, 0xff6b9d);
     }
   ];
 
@@ -1045,7 +1294,7 @@ function endAim(cx, cy) {
   aimLine.visible = false;
   arrowMesh.visible = false;
 
-  if (aimPower > 0.05) {
+  if (aimPower > 0.05 && !isBallBroken && !inLoopAnimation) {
     const dx = dragStart.x - cx;
     const dy = dragStart.y - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1054,6 +1303,9 @@ function endAim(cx, cy) {
       strokes++;
       updateScoreDisplay();
       sfxSwing(aimPower);
+
+      // Save safe shot position for respawns if ball breaks on spikes
+      lastShotPos.copy(ballMesh.position);
 
       // Trigger putting swing animation on taco de golfe
       isSwingingClub = true;
@@ -1075,6 +1327,80 @@ function endAim(cx, cy) {
   }
   aimPower = 0;
   powerBarEl.style.width = '0%';
+}
+
+// =============================================
+//  SPIKE HAZARD BALL SHATTER & RESPAWN
+// =============================================
+function triggerBallBreak(hazardX, hazardZ) {
+  if (isBallBroken || inHole) return;
+  isBallBroken = true;
+  isBallMoving = false;
+
+  ballBody.velocity.set(0, 0, 0);
+  ballBody.angularVelocity.set(0, 0, 0);
+  ballBody.sleep();
+  ballMesh.visible = false;
+
+  sfxBallBreak();
+
+  // Spawn 12 bouncing 3D geometric fragments
+  const ballPos = ballMesh.position.clone();
+  for (let i = 0; i < 12; i++) {
+    const shardGeo = new THREE.DodecahedronGeometry(0.06 + Math.random() * 0.04, 0);
+    const shardMesh = new THREE.Mesh(shardGeo, shardMat);
+    shardMesh.position.copy(ballPos);
+    shardMesh.castShadow = true;
+    scene.add(shardMesh);
+
+    const angle = (i / 12) * Math.PI * 2 + (Math.random() - 0.5);
+    const speed = 2.0 + Math.random() * 3.5;
+    activeFragments.push({
+      mesh: shardMesh,
+      vx: Math.cos(angle) * speed,
+      vy: 2.8 + Math.random() * 3.2,
+      vz: Math.sin(angle) * speed,
+      rx: (Math.random() - 0.5) * 12,
+      ry: (Math.random() - 0.5) * 12,
+      rz: (Math.random() - 0.5) * 12,
+      life: 1.0
+    });
+  }
+
+  strokes++;
+  updateScoreDisplay();
+
+  messageEl.textContent = 'Ouch! 💥 Ball Broken (+1 Stroke)';
+  messageEl.className = 'show danger';
+  messageEl.style.display = 'block';
+
+  setTimeout(() => {
+    // Clear fragment meshes
+    for (const f of activeFragments) {
+      scene.remove(f.mesh);
+      if (f.mesh.geometry) f.mesh.geometry.dispose();
+    }
+    activeFragments = [];
+
+    sfxRespawn();
+    ballStartPos.copy(lastShotPos);
+    ballBody.position.copy(ballStartPos);
+    ballBody.velocity.set(0, 0, 0);
+    ballBody.angularVelocity.set(0, 0, 0);
+    ballBody.wakeUp();
+    ballMesh.position.copy(ballStartPos);
+    ballMesh.visible = true;
+
+    charStandPos.set(lastShotPos.x, 0, lastShotPos.z + 1.2);
+    if (charGroup) {
+      charGroup.position.copy(charStandPos);
+      charGroup.lookAt(holePos.x, 0, holePos.z);
+    }
+
+    messageEl.style.display = 'none';
+    messageEl.className = '';
+    isBallBroken = false;
+  }, 950);
 }
 
 // =============================================
@@ -1138,6 +1464,8 @@ world.addEventListener('beginContact', (e) => {
 function resetGameState(fullReset = true) {
   inHole = false;
   isBallMoving = false;
+  isBallBroken = false;
+  inLoopAnimation = false;
   strokes = 0;
   if (fullReset) {
     totalStrokes = 0;
@@ -1149,8 +1477,16 @@ function resetGameState(fullReset = true) {
   if (endActionsContainer) endActionsContainer.style.display = 'none';
   aimHintEl.style.display = 'block';
 
+  // Clear broken fragments
+  for (const f of activeFragments) {
+    scene.remove(f.mesh);
+    if (f.mesh.geometry) f.mesh.geometry.dispose();
+  }
+  activeFragments = [];
+
   // Generate new randomized hole & tee & obstacle layout
   setRandomHoleAndTee(true);
+  lastShotPos.copy(teePos);
   ballMesh.visible = true;
 
   // Reset camera
@@ -1192,6 +1528,8 @@ function resetBall() {
   ballBody.angularVelocity.set(0, 0, 0);
   ballBody.wakeUp();
   isBallMoving = false;
+  isBallBroken = false;
+  inLoopAnimation = false;
   charStandPos.set(teePos.x, 0, teePos.z + 1.2);
 }
 
@@ -1214,23 +1552,119 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.1);
   elapsed = clock.getElapsedTime();
 
-  // Physics
+  // Physics Step
   world.step(1 / 60, dt, 3);
 
-  // Sync ball mesh to physics (unless sunk in hole)
-  if (!inHole) {
+  // Sync ball mesh to physics (unless sunk or in 3D loop animation)
+  if (!inHole && !inLoopAnimation && !isBallBroken) {
     for (const obj of objectsToUpdate) {
       obj.mesh.position.copy(obj.body.position);
       obj.mesh.quaternion.copy(obj.body.quaternion);
     }
   }
 
-  // HOLE DETECTION: Check if ball enters hole cup
+  // 1. SPEED BOOSTER / CONVEYOR BELT PHYSICS
+  if (!isBallBroken && !inHole && gameStarted) {
+    for (const b of activeBoosters) {
+      // Animate chevron arrows
+      if (b.arrows) {
+        b.arrows.forEach((arr, i) => {
+          arr.position.y = 0.05 + Math.sin(elapsed * 6 + i * 1.5) * 0.02;
+        });
+      }
+
+      const dx = Math.abs(ballMesh.position.x - b.px);
+      const dz = Math.abs(ballMesh.position.z - b.pz);
+      if (dx < b.width / 2 + 0.1 && dz < b.length / 2 + 0.1 && ballMesh.position.y < 0.6) {
+        ballBody.wakeUp();
+        ballBody.velocity.x += b.dirX * b.power * dt;
+        ballBody.velocity.z += b.dirZ * b.power * dt;
+        isBallMoving = true;
+
+        if (elapsed - lastBoostSfxTime > 0.26) {
+          sfxBoost();
+          lastBoostSfxTime = elapsed;
+        }
+      }
+    }
+  }
+
+  // 2. SPIKE HAZARD COLLISION CHECK
+  if (!isBallBroken && !inHole && gameStarted) {
+    for (const sp of activeSpikes) {
+      const dist = Math.hypot(ballMesh.position.x - sp.px, ballMesh.position.z - sp.pz);
+      if (dist < sp.radius * 0.9 && ballMesh.position.y < 0.65) {
+        triggerBallBreak(sp.px, sp.pz);
+        break;
+      }
+    }
+  }
+
+  // 3. 3D LOOP-DE-LOOP INTERACTION
+  if (!isBallBroken && !inHole && !inLoopAnimation && gameStarted) {
+    for (const lp of activeLoops) {
+      const distEntry = Math.hypot(ballMesh.position.x - lp.entryPos.x, ballMesh.position.z - lp.entryPos.z);
+      if (distEntry < 0.8 && ballBody.velocity.length() > 1.0) {
+        inLoopAnimation = true;
+        loopAnimProgress = 0;
+        currentLoopObj = lp;
+        sfxLoop();
+        ballBody.velocity.set(0, 0, 0);
+        ballBody.sleep();
+        break;
+      }
+    }
+  }
+
+  // 3D Loop Animation Trajectory
+  if (inLoopAnimation && currentLoopObj) {
+    loopAnimProgress += dt * 2.8;
+    const lp = currentLoopObj;
+    const loopY = Math.max(0.2, Math.sin(loopAnimProgress * Math.PI) * lp.radius * 1.8 + 0.2);
+    const loopZ = lp.entryPos.z + (lp.exitPos.z - lp.entryPos.z) * loopAnimProgress;
+    const loopX = lp.px + Math.sin(loopAnimProgress * Math.PI * 2) * 0.25;
+    ballMesh.position.set(loopX, loopY, loopZ);
+    ballBody.position.copy(ballMesh.position);
+
+    if (loopAnimProgress >= 1.0) {
+      inLoopAnimation = false;
+      ballBody.wakeUp();
+      const exitDirZ = lp.exitPos.z < lp.entryPos.z ? -1 : 1;
+      ballBody.velocity.set(0, 0, exitDirZ * 9.0);
+      isBallMoving = true;
+    }
+  }
+
+  // 4. BALL SHATTER FRAGMENTS SIMULATION
+  for (let i = activeFragments.length - 1; i >= 0; i--) {
+    const f = activeFragments[i];
+    f.vy -= 18.0 * dt; // gravity
+    f.mesh.position.x += f.vx * dt;
+    f.mesh.position.y += f.vy * dt;
+    f.mesh.position.z += f.vz * dt;
+    f.mesh.rotation.x += f.rx * dt;
+    f.mesh.rotation.y += f.ry * dt;
+    f.mesh.rotation.z += f.rz * dt;
+
+    if (f.mesh.position.y < 0.05) {
+      f.mesh.position.y = 0.05;
+      f.vy = -f.vy * 0.45;
+      f.vx *= 0.8;
+      f.vz *= 0.8;
+    }
+    f.life -= dt * 1.1;
+    if (f.life <= 0) {
+      scene.remove(f.mesh);
+      if (f.mesh.geometry) f.mesh.geometry.dispose();
+      activeFragments.splice(i, 1);
+    }
+  }
+
+  // HOLE DETECTION: Gravitational suction when rolling near the hole rim
   const HOLE_RADIUS = 0.52;
   const distToHole = Math.hypot(ballMesh.position.x - holePos.x, ballMesh.position.z - holePos.z);
 
-  if (!inHole && gameStarted) {
-    // Gravitational suction when rolling near the hole rim
+  if (!inHole && gameStarted && !isBallBroken && !inLoopAnimation) {
     if (distToHole < HOLE_RADIUS * 1.4) {
       const pull = 10.0;
       ballBody.velocity.x += (holePos.x - ballMesh.position.x) * pull * dt;
@@ -1245,20 +1679,20 @@ function tick() {
   }
 
   // Ball stopped check — ping-pong ball snappy deceleration and decisive stop
-  if (isBallMoving && !inHole) {
+  if (isBallMoving && !inHole && !inLoopAnimation && !isBallBroken) {
     const vel = ballBody.velocity;
     const horizontalSpeedSq = vel.x * vel.x + vel.z * vel.z;
     const totalSpeedSq = horizontalSpeedSq + vel.y * vel.y;
 
     // Ping-pong style air/surface braking when ball slows down
-    if (totalSpeedSq < 2.2) { // speed < ~1.5 m/s
+    if (totalSpeedSq < 2.2) {
       const brakeFactor = Math.max(0, 1 - 4.5 * dt);
       ballBody.velocity.x *= brakeFactor;
       ballBody.velocity.z *= brakeFactor;
       ballBody.angularVelocity.scale(brakeFactor, ballBody.angularVelocity);
     }
 
-    // Snappy stop cutoff — stops immediately without dragging
+    // Snappy stop cutoff
     if (totalSpeedSq < 0.12 || (horizontalSpeedSq < 0.08 && Math.abs(vel.y) < 0.15)) {
       ballBody.velocity.set(0, 0, 0);
       ballBody.angularVelocity.set(0, 0, 0);
@@ -1275,9 +1709,8 @@ function tick() {
     resetBall();
   }
 
-  // Character: smoothly walks to charStandPos, does NOT follow the ball in real-time
+  // Character: smoothly walks to charStandPos
   if (charGroup && gameStarted) {
-    // Smoothly lerp character to the target stand position
     charGroup.position.x += (charStandPos.x - charGroup.position.x) * 0.05;
     charGroup.position.z += (charStandPos.z - charGroup.position.z) * 0.05;
 

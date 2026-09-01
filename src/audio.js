@@ -159,3 +159,89 @@ export function sfxSelect() {
   playTone(600, 0.1, 'sine', 0.1, 0.08);
   playTone(800, 0.15, 'sine', 0.08, 0.16);
 }
+
+/** Speed booster pad / conveyor belt whoosh */
+export function sfxBoost() {
+  const ctx = getCtx();
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(320, t);
+  osc.frequency.exponentialRampToValueAtTime(1400, t + 0.22);
+
+  // Bandpass filter to make it smooth and energetic
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(900, t);
+  filter.frequency.exponentialRampToValueAtTime(2400, t + 0.22);
+  filter.Q.value = 3.0;
+
+  gain.gain.setValueAtTime(0.18, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.25);
+
+  playNoise(0.2, 0.06);
+}
+
+/** Spike trap impact — ceramic/glass ball break crack + low pop */
+export function sfxBallBreak() {
+  const ctx = getCtx();
+  const t = ctx.currentTime;
+
+  // Sharp snap/crack
+  playNoise(0.15, 0.22);
+
+  // Metallic dissonance shatter
+  [920, 1340, 1850, 420].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = i % 2 === 0 ? 'triangle' : 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.3, t + 0.12);
+
+    gain.gain.setValueAtTime(0.15, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.14);
+  });
+}
+
+/** 3D Loop-de-loop swirling acoustic chute whoosh */
+export function sfxLoop() {
+  const ctx = getCtx();
+  const t = ctx.currentTime;
+  playNoise(0.4, 0.12);
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(400, t);
+  osc.frequency.linearRampToValueAtTime(880, t + 0.2);
+  osc.frequency.linearRampToValueAtTime(350, t + 0.4);
+
+  gain.gain.setValueAtTime(0.14, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.42);
+}
+
+/** Ball respawn sparkle chime */
+export function sfxRespawn() {
+  playTone(523, 0.08, 'sine', 0.1, 0.0);
+  playTone(784, 0.1, 'sine', 0.1, 0.06);
+  playTone(1046, 0.15, 'sine', 0.12, 0.12);
+}
+
