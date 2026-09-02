@@ -1282,49 +1282,16 @@ function updateScoreDisplay() {
 }
 
 // =============================================
-//  MODE & CHARACTER SELECTION
 // =============================================
-modeTabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    sfxClick();
-    modeTabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    selectedGameMode = tab.dataset.mode;
-    selectStep = 1;
-
-    if (selectedGameMode === 'solo') {
-      charSelectSubtitleEl.textContent = 'Pick Your Golfer!';
-    } else if (selectedGameMode === '1v1_local') {
-      charSelectSubtitleEl.textContent = 'Player 1: Pick Your Golfer!';
-    } else if (selectedGameMode === '1v1_bot') {
-      charSelectSubtitleEl.textContent = 'Pick Your Golfer (vs AI Bot)!';
-    }
-  });
-});
-
+//  CHARACTER SELECTION (1P SOLO ONLY)
+// =============================================
 document.querySelectorAll('.char-card').forEach(card => {
   card.addEventListener('click', () => {
     sfxSelect();
     const charKey = card.dataset.char;
-
-    if (selectedGameMode === 'solo') {
-      p1.charKey = charKey;
-      startGame();
-    } else if (selectedGameMode === '1v1_local') {
-      if (selectStep === 1) {
-        p1.charKey = charKey;
-        selectStep = 2;
-        charSelectSubtitleEl.textContent = 'Player 2: Pick Your Golfer!';
-      } else {
-        p2.charKey = charKey;
-        startGame();
-      }
-    } else if (selectedGameMode === '1v1_bot') {
-      p1.charKey = charKey;
-      const keys = Object.keys(characters).filter(k => k !== charKey);
-      p2.charKey = keys[Math.floor(Math.random() * keys.length)];
-      startGame();
-    }
+    selectedGameMode = 'solo';
+    p1.charKey = charKey;
+    startGame();
   });
 });
 
