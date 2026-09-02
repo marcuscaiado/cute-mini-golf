@@ -128,23 +128,125 @@ export function sfxBounce(intensity = 1.0) {
   playNoise(0.02, vol * 0.8);
 }
 
-/** Ball drops into hole — cute descending plop */
-export function sfxHoleSink() {
-  playTone(600, 0.12, 'sine', 0.12);
-  playTone(400, 0.15, 'sine', 0.1, 0.08);
-  playTone(250, 0.2, 'sine', 0.08, 0.16);
+// =============================================
+//  QUAD-COLOR CONFETTI CANNON (Spectrum Engine)
+// =============================================
+const confettiParticles = [];
+const QUAD_COLORS = ['#00f5ff', '#ff007f', '#ffd166', '#06d6a0', '#8ab4f8', '#f28b82', '#c084fc'];
+let confettiCanvas = null;
+let confettiCtx = null;
+
+function initConfetti() {
+  if (!confettiCanvas) {
+    confettiCanvas = document.getElementById('confetti-canvas');
+    if (confettiCanvas) {
+      confettiCtx = confettiCanvas.getContext('2d');
+      const resize = () => {
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+      };
+      window.addEventListener('resize', resize);
+      resize();
+
+      const loop = () => {
+        if (confettiCtx && confettiCanvas) {
+          confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+          for (let i = confettiParticles.length - 1; i >= 0; i--) {
+            const p = confettiParticles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.speedY += p.gravity;
+            p.opacity -= p.decay;
+            p.rotation += p.rotSpeed;
+            if (p.opacity <= 0) {
+              confettiParticles.splice(i, 1);
+              continue;
+            }
+            confettiCtx.save();
+            confettiCtx.globalAlpha = Math.max(0, p.opacity);
+            confettiCtx.translate(p.x, p.y);
+            confettiCtx.rotate((p.rotation * Math.PI) / 180);
+            confettiCtx.fillStyle = p.color;
+            confettiCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+            confettiCtx.restore();
+          }
+        }
+        requestAnimationFrame(loop);
+      };
+      loop();
+    }
+  }
 }
 
-/** Victory fanfare — happy ascending melody */
-export function sfxVictory() {
-  const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
-  notes.forEach((freq, i) => {
-    playTone(freq, 0.25, 'sine', 0.12, i * 0.15);
-    playTone(freq * 0.5, 0.25, 'triangle', 0.06, i * 0.15); // Harmony
+export function explodeConfetti(x = window.innerWidth / 2, y = window.innerHeight * 0.45, count = 65) {
+  initConfetti();
+  for (let i = 0; i < count; i++) {
+    confettiParticles.push({
+      x, y,
+      color: QUAD_COLORS[Math.floor(Math.random() * QUAD_COLORS.length)],
+      size: Math.random() * 8 + 5,
+      speedX: (Math.random() - 0.5) * 16,
+      speedY: (Math.random() - 0.8) * 18,
+      gravity: 0.45,
+      opacity: 1,
+      decay: Math.random() * 0.02 + 0.015,
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 10
+    });
+  }
+}
+
+/** Ball drops into hole — satisfying cup thunk + celestial dopamine chime + confetti */
+export function sfxHoleSink() {
+  const ctx = getCtx();
+  const t = ctx.currentTime;
+
+  // 1. Acoustic golf cup bottom "THUNK" (wood/plastic bottom tap + sub-bass body)
+  const cupOsc = ctx.createOscillator();
+  const cupGain = ctx.createGain();
+  cupOsc.type = 'sine';
+  cupOsc.frequency.setValueAtTime(140, t);
+  cupOsc.frequency.exponentialRampToValueAtTime(38, t + 0.12);
+  cupGain.gain.setValueAtTime(0.35, t);
+  cupGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+  cupOsc.connect(cupGain);
+  cupGain.connect(ctx.destination);
+  cupOsc.start(t);
+  cupOsc.stop(t + 0.13);
+
+  // Filtered click tap
+  playNoise(0.03, 0.15);
+
+  // 2. Pure Celestial Dopamine Ascension Arpeggio (C5, E5, G5, C6, E6)
+  const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+  notes.forEach((freq, idx) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t + 0.06 + idx * 0.05);
+
+    gain.gain.setValueAtTime(0, t + 0.06 + idx * 0.05);
+    gain.gain.linearRampToValueAtTime(0.18, t + 0.06 + idx * 0.05 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + idx * 0.05 + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t + 0.06 + idx * 0.05);
+    osc.stop(t + 0.06 + idx * 0.05 + 0.5);
   });
-  // Sparkle on top
-  playTone(1568, 0.4, 'sine', 0.06, 0.6);
-  playTone(2093, 0.5, 'sine', 0.04, 0.7);
+
+  // Confetti explosion
+  explodeConfetti(window.innerWidth / 2, window.innerHeight * 0.4, 65);
+}
+
+/** Victory fanfare — happy royal dopamine fanfare */
+export function sfxVictory() {
+  const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+  notes.forEach((freq, i) => {
+    playTone(freq, 0.35, 'triangle', 0.16, i * 0.08);
+    playTone(freq * 0.5, 0.35, 'sine', 0.1, i * 0.08);
+  });
+  playTone(2093, 0.6, 'sine', 0.06, 0.5);
 }
 
 /** UI click sound — light tap */
