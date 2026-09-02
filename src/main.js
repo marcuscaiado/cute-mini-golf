@@ -603,10 +603,11 @@ function generateCourseLayout(archetypeIndex = -1) {
 
     // 3: 2-Tier Castle (Sloped Ramp to Elevated Green Terrace)
     () => {
-      addElevatedTerrace(0, 0.8, -7.5, 9.6, 6.4, 0, -1.9, 4.8, 3.6, true);
-      if (isFarEnough(-3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, -3.2, 2.5, 0x48dbfb);
-      if (isFarEnough(3.2, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, 3.2, 2.5, 0xff6b9d);
-      if (isFarEnough(0, 4.8, 1.5)) addSpeedBooster(0, 4.8, 1.8, 2.5, 0, -1, 24.0);
+      // Terrace: pz = -8.0, sz = 8.0 (Front edge at z = -4.0). Ramp: rampLength = 4.8, rampZ = -1.6 (Connects z = +0.8 to -4.0 seamlessly!)
+      addElevatedTerrace(0, 0.75, -8.0, 9.6, 8.0, 0, -1.6, 4.8, 3.8, true);
+      if (isFarEnough(-3.2, 3.0, 1.4)) addBumperCylinder(0.7, 0.6, -3.2, 3.0, 0x48dbfb);
+      if (isFarEnough(3.2, 3.0, 1.4)) addBumperCylinder(0.7, 0.6, 3.2, 3.0, 0xff6b9d);
+      if (isFarEnough(0, 5.0, 1.5)) addSpeedBooster(0, 5.0, 1.8, 2.5, 0, -1, 24.0);
     },
 
     // 4: 3D Looping Slingshot Chute
