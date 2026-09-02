@@ -23,9 +23,9 @@ const ARCHETYPES = [
   '1: Turbo Speedway (Boosters & Chicanes)',
   '2: Spike Gauntlet (Hazard Traps & Bank Corridors)',
   '3: 2-Tier Castle (Sloped Ascent Ramp & Upper Terrace)',
-  '4: 3D Looping Slingshot Chute',
+  '4: The Dutch Windmill Challenge (Spinning Blades & Gateway Tunnel)',
   '5: The Chaos Mixer (Boosters + Spikes + Bumpers)',
-  '6: Double-Deck Terrace Bridge & Drop Funnel'
+  '6: Candy Carousel Slalom (Fairway Banks & Bumper Funnel)'
 ];
 
 let totalTests = 0;

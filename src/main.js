@@ -55,12 +55,10 @@ let isBotExecuting = false;
 let currentObstacleObjects = [];
 let activeBoosters = [];
 let activeSpikes = [];
-let activeLoops = [];
+let activeWindmills = [];
 let activeFragments = [];
 let lastBoostSfxTime = 0;
-let inLoopAnimation = false;
-let loopAnimProgress = 0;
-let currentLoopObj = null;
+let lastWindmillHitTime = 0;
 
 // --- DOM ELEMENTS ---
 const charSelectEl = document.getElementById('char-select');
@@ -222,8 +220,11 @@ const boosterBorderMat = new THREE.MeshStandardMaterial({ color: '#2d3436', roug
 const boosterArrowMat = new THREE.MeshStandardMaterial({ color: '#00f5ff', roughness: 0.2, emissive: '#00f5ff', emissiveIntensity: 0.9 });
 const spikePlateMat = new THREE.MeshStandardMaterial({ color: '#1e272e', roughness: 0.4, metalness: 0.8 });
 const spikeConeMat = new THREE.MeshStandardMaterial({ color: '#ff3838', roughness: 0.25, emissive: '#c0392b', emissiveIntensity: 0.8 });
-const loopNeonMat = new THREE.MeshStandardMaterial({ color: '#6c5ce7', roughness: 0.3, emissive: '#a29bfe', emissiveIntensity: 0.5 });
-const loopRingMat = new THREE.MeshStandardMaterial({ color: '#fd79a8', roughness: 0.2, emissive: '#fd79a8', emissiveIntensity: 0.85 });
+const windmillWallMat = new THREE.MeshStandardMaterial({ color: '#fff9e6', roughness: 0.5 });
+const windmillRoofMat = new THREE.MeshStandardMaterial({ color: '#ff7675', roughness: 0.3 });
+const windmillWoodMat = new THREE.MeshStandardMaterial({ color: '#8b5a2b', roughness: 0.4 });
+const windmillSailMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.2, side: THREE.DoubleSide });
+const windmillGlowMat = new THREE.MeshStandardMaterial({ color: '#ffd166', emissive: '#ffd166', emissiveIntensity: 0.6 });
 const shardMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.15, metalness: 0.1 });
 
 // =============================================
@@ -270,7 +271,7 @@ function clearObstacles() {
   currentObstacleObjects = [];
   activeBoosters = [];
   activeSpikes = [];
-  activeLoops = [];
+  activeWindmills = [];
   currentTerraceHeight = 0;
   holePos.y = 0.02;
   holeMesh.position.set(holePos.x, 0.02, holePos.z);
@@ -390,34 +391,112 @@ function addSpikeTrap(px, pz, radius = 0.8, spikeCount = 5) {
   return spikeData;
 }
 
-function addLoopChute(px, pz, angle = 0, radius = 1.8) {
+function addWindmill(px, pz, angle = 0) {
   const group = new THREE.Group();
-  const tubeGeo = new THREE.TorusGeometry(radius, 0.35, 12, 24, Math.PI);
-  const tubeMesh = new THREE.Mesh(tubeGeo, loopNeonMat);
-  tubeMesh.rotation.z = Math.PI / 2;
-  tubeMesh.position.y = radius * 0.9;
-  tubeMesh.castShadow = true;
-  group.add(tubeMesh);
 
-  const entryRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 20), loopRingMat);
-  entryRing.position.set(0, 0.4, radius);
-  group.add(entryRing);
+  // 1. Left Tower Pillar
+  const pillarW = 0.85;
+  const pillarH = 2.0;
+  const pillarD = 1.6;
+  const tunnelW = 1.35;
 
-  const exitRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 20), loopRingMat);
-  exitRing.position.set(0, 0.4, -radius);
-  group.add(exitRing);
+  const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, pillarH, pillarD), windmillWallMat);
+  leftPillar.position.set(-tunnelW / 2 - pillarW / 2, pillarH / 2, 0);
+  leftPillar.castShadow = true;
+  leftPillar.receiveShadow = true;
+  group.add(leftPillar);
+
+  const leftBody = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px + (-tunnelW / 2 - pillarW / 2), pillarH / 2, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(pillarW / 2, pillarH / 2, pillarD / 2)),
+    material: wallPhysMat
+  });
+  world.addBody(leftBody);
+  currentObstacleObjects.push({ mesh: leftPillar, body: leftBody });
+
+  // 2. Right Tower Pillar
+  const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, pillarH, pillarD), windmillWallMat);
+  rightPillar.position.set(tunnelW / 2 + pillarW / 2, pillarH / 2, 0);
+  rightPillar.castShadow = true;
+  rightPillar.receiveShadow = true;
+  group.add(rightPillar);
+
+  const rightBody = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(px + (tunnelW / 2 + pillarW / 2), pillarH / 2, pz),
+    shape: new CANNON.Box(new CANNON.Vec3(pillarW / 2, pillarH / 2, pillarD / 2)),
+    material: wallPhysMat
+  });
+  world.addBody(rightBody);
+  currentObstacleObjects.push({ mesh: rightPillar, body: rightBody });
+
+  // 3. Arch Overhead Lintel
+  const totalW = tunnelW + pillarW * 2;
+  const lintelH = 0.9;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(totalW, lintelH, pillarD), windmillWallMat);
+  lintel.position.set(0, pillarH + lintelH / 2, 0);
+  lintel.castShadow = true;
+  group.add(lintel);
+
+  // 4. Conical Roof
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(totalW * 0.65, 1.4, 8), windmillRoofMat);
+  roof.position.set(0, pillarH + lintelH + 0.7, 0);
+  roof.castShadow = true;
+  group.add(roof);
+
+  // 5. Glowing Attic Window
+  const windowMesh = new THREE.Mesh(new THREE.CircleGeometry(0.32, 16), windmillGlowMat);
+  windowMesh.position.set(0, pillarH + lintelH * 0.6, pillarD / 2 + 0.02);
+  group.add(windowMesh);
+
+  // 6. Spinning Rotor Hub & 4 Blades
+  const bladesGroup = new THREE.Group();
+  bladesGroup.position.set(0, pillarH + 0.35, pillarD / 2 + 0.18);
+
+  const hubCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.22, 16), windmillWoodMat);
+  hubCap.rotation.x = Math.PI / 2;
+  bladesGroup.add(hubCap);
+
+  const bladeLength = 2.05;
+  const bladeWidth = 0.42;
+  for (let i = 0; i < 4; i++) {
+    const bladeArm = new THREE.Group();
+    bladeArm.rotation.z = (Math.PI / 2) * i + (Math.PI / 4); // Initial "X" open position
+
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(0.08, bladeLength, 0.06), windmillWoodMat);
+    spar.position.set(0, bladeLength / 2, 0);
+    bladeArm.add(spar);
+
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(bladeWidth, bladeLength * 0.72), windmillSailMat);
+    sail.position.set(bladeWidth / 2 - 0.04, bladeLength * 0.58, 0.02);
+    sail.castShadow = true;
+    bladeArm.add(sail);
+
+    bladesGroup.add(bladeArm);
+  }
+
+  group.add(bladesGroup);
 
   group.position.set(px, 0, pz);
   group.rotation.y = angle;
   scene.add(group);
-
-  const entryWorld = new THREE.Vector3(0, 0.2, radius).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(new THREE.Vector3(px, 0, pz));
-  const exitWorld = new THREE.Vector3(0, 0.2, -radius).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(new THREE.Vector3(px, 0, pz));
-
-  const loopData = { px, pz, radius, angle, entryPos: entryWorld, exitPos: exitWorld, mesh: group };
-  activeLoops.push(loopData);
   currentObstacleObjects.push({ mesh: group });
-  return loopData;
+
+  const windmillData = {
+    px,
+    pz,
+    tunnelW,
+    doorZ: pz + pillarD / 2,
+    exitZ: pz - pillarD / 2,
+    bladesGroup,
+    bladeAngle: 0,
+    bladeSpeed: 1.65,
+    mesh: group
+  };
+
+  activeWindmills.push(windmillData);
+  return windmillData;
 }
 
 /** 2-TIER ELEVATED GREEN TERRACE & FAIRWAY RAMP */
@@ -612,12 +691,14 @@ function generateCourseLayout(archetypeIndex = -1) {
       if (isFarEnough(0, 5.0, 1.5)) addSpeedBooster(0, 5.0, 1.8, 2.5, 0, -1, 24.0);
     },
 
-    // 4: 3D Looping Slingshot Chute
+    // 4: The Dutch Windmill Challenge (Spinning Blades & Gateway Tunnel)
     () => {
-      if (isFarEnough(0, 0, 1.8)) addLoopChute(0, 0, 0, 1.8);
-      if (isFarEnough(0, 4.2, 1.5)) addSpeedBooster(0, 4.2, 1.8, 3.0, 0, -1, 28.0);
-      addObstacleBox(3.0, 0.75, 0.6, -3.4, 0.35, -2.5, Math.PI / 4, obstacleMat);
-      addObstacleBox(3.0, 0.75, 0.6, 3.4, 0.35, -2.5, -Math.PI / 4, obstacleMat);
+      if (isFarEnough(0, 0, 2.0)) addWindmill(0, 0, 0);
+      if (isFarEnough(0, 4.5, 1.5)) addSpeedBooster(0, 4.5, 1.8, 2.8, 0, -1, 24.0);
+      addObstacleBox(2.8, 0.75, 0.6, -3.5, 0.35, 0, 0, obstacleMat);
+      addObstacleBox(2.8, 0.75, 0.6, 3.5, 0.35, 0, 0, obstacleMat);
+      if (isFarEnough(-2.8, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, -2.8, 2.5, 0xfeca57);
+      if (isFarEnough(2.8, 2.5, 1.4)) addBumperCylinder(0.7, 0.6, 2.8, 2.5, 0x48dbfb);
     },
 
     // 5: The Chaos Mixer (Boosters + Spikes + Bumpers)
@@ -1437,7 +1518,7 @@ function endAim(cx, cy) {
   arrowMesh.visible = false;
 
   const currBall = getActiveBall();
-  if (aimPower > 0.05 && !currBall.player.isBroken && !inLoopAnimation) {
+  if (aimPower > 0.05 && !currBall.player.isBroken) {
     const dx = dragStart.x - cx;
     const dy = dragStart.y - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1685,7 +1766,6 @@ world.addEventListener('beginContact', (e) => {
 // =============================================
 function resetGameState(fullReset = true) {
   isBallMoving = false;
-  inLoopAnimation = false;
   p1.strokes = 0;
   p2.strokes = 0;
   p1.inHole = false;
@@ -1775,11 +1855,11 @@ function tick() {
   world.step(1 / 60, dt, 3);
 
   // Sync ball meshes
-  if (!p1.inHole && !inLoopAnimation && !p1.isBroken) {
+  if (!p1.inHole && !p1.isBroken) {
     ballMesh1.position.copy(ballBody1.position);
     ballMesh1.quaternion.copy(ballBody1.quaternion);
   }
-  if (selectedGameMode !== 'solo' && !p2.inHole && !inLoopAnimation && !p2.isBroken) {
+  if (selectedGameMode !== 'solo' && !p2.inHole && !p2.isBroken) {
     ballMesh2.position.copy(ballBody2.position);
     ballMesh2.quaternion.copy(ballBody2.quaternion);
   }
@@ -1837,41 +1917,46 @@ function tick() {
     }
   }
 
-  // 3. 3D LOOP-DE-LOOP
-  if (gameStarted && !inLoopAnimation) {
-    const currBall = getActiveBall();
-    if (!currBall.player.isBroken && !currBall.player.inHole) {
-      for (const lp of activeLoops) {
-        const distEntry = Math.hypot(currBall.mesh.position.x - lp.entryPos.x, currBall.mesh.position.z - lp.entryPos.z);
-        if (distEntry < 0.8 && currBall.body.velocity.length() > 1.0) {
-          inLoopAnimation = true;
-          loopAnimProgress = 0;
-          currentLoopObj = lp;
-          sfxLoop();
-          currBall.body.velocity.set(0, 0, 0);
-          currBall.body.sleep();
-          break;
+  // 3. ANIMATED WINDMILL BLADES & DOOR TIMING
+  if (gameStarted) {
+    for (const wm of activeWindmills) {
+      wm.bladeAngle += dt * wm.bladeSpeed;
+      wm.bladesGroup.rotation.z = wm.bladeAngle;
+
+      const currBall = getActiveBall();
+      if (!currBall.player.isBroken && !currBall.player.inHole) {
+        const bPos = currBall.mesh.position;
+        const distToDoor = Math.hypot(bPos.x - wm.px, bPos.z - wm.doorZ);
+
+        // Check if ball is rolling towards doorway from fairway (velocity.z < -0.1)
+        if (distToDoor < 0.85 && currBall.body.velocity.z < -0.1 && Math.abs(bPos.x - wm.px) < wm.tunnelW / 2) {
+          // Check if a blade is currently blocking the bottom archway (near 6 o'clock)
+          const cycle = Math.abs(((wm.bladeAngle + Math.PI / 4) % (Math.PI / 2)) - (Math.PI / 4));
+          const isBladeBlocking = cycle < 0.26;
+
+          const nowTime = performance.now();
+          if (isBladeBlocking) {
+            if (nowTime - lastWindmillHitTime > 320) {
+              lastWindmillHitTime = nowTime;
+              sfxBounce();
+              // Rebound backwards off rotating wooden blade
+              currBall.body.velocity.z = Math.abs(currBall.body.velocity.z) * 0.72 + 1.8;
+              currBall.body.velocity.x += (Math.random() - 0.5) * 2.2;
+              currBall.body.velocity.y = 0.5;
+              isBallMoving = true;
+            }
+          } else {
+            // Door is clear! Shot sails smoothly through the windmill archway
+            if (nowTime - lastWindmillHitTime > 800) {
+              lastWindmillHitTime = nowTime;
+              sfxBoost();
+              currBall.body.velocity.x *= 0.4;
+              currBall.body.velocity.z = Math.min(currBall.body.velocity.z, -6.8);
+              isBallMoving = true;
+            }
+          }
         }
       }
-    }
-  }
-
-  if (inLoopAnimation && currentLoopObj) {
-    loopAnimProgress += dt * 2.8;
-    const lp = currentLoopObj;
-    const currBall = getActiveBall();
-    const loopY = Math.max(0.2, Math.sin(loopAnimProgress * Math.PI) * lp.radius * 1.8 + 0.2);
-    const loopZ = lp.entryPos.z + (lp.exitPos.z - lp.entryPos.z) * loopAnimProgress;
-    const loopX = lp.px + Math.sin(loopAnimProgress * Math.PI * 2) * 0.25;
-    currBall.mesh.position.set(loopX, loopY, loopZ);
-    currBall.body.position.copy(currBall.mesh.position);
-
-    if (loopAnimProgress >= 1.0) {
-      inLoopAnimation = false;
-      currBall.body.wakeUp();
-      const exitDirZ = lp.exitPos.z < lp.entryPos.z ? -1 : 1;
-      currBall.body.velocity.set(0, 0, exitDirZ * 9.0);
-      isBallMoving = true;
     }
   }
 
@@ -1903,7 +1988,7 @@ function tick() {
   // HOLE SUCTION & SINK DETECTION
   const HOLE_RADIUS = 0.52;
   if (gameStarted) {
-    if (!p1.inHole && !p1.isBroken && !inLoopAnimation) {
+    if (!p1.inHole && !p1.isBroken) {
       const d1 = Math.hypot(ballMesh1.position.x - holePos.x, ballMesh1.position.z - holePos.z);
       const vd1 = Math.abs(ballMesh1.position.y - holePos.y);
       if (d1 < HOLE_RADIUS * 1.4 && vd1 < 0.85) {
@@ -1914,7 +1999,7 @@ function tick() {
       }
     }
 
-    if (selectedGameMode !== 'solo' && !p2.inHole && !p2.isBroken && !inLoopAnimation) {
+    if (selectedGameMode !== 'solo' && !p2.inHole && !p2.isBroken) {
       const d2 = Math.hypot(ballMesh2.position.x - holePos.x, ballMesh2.position.z - holePos.z);
       const vd2 = Math.abs(ballMesh2.position.y - holePos.y);
       if (d2 < HOLE_RADIUS * 1.4 && vd2 < 0.85) {
@@ -1927,7 +2012,7 @@ function tick() {
   }
 
   // BALL STOPPED CHECK & 1V1 TURN TRANSITIONS
-  if (isBallMoving && gameStarted && !inLoopAnimation) {
+  if (isBallMoving && gameStarted) {
     const currBall = getActiveBall();
     const vel = currBall.body.velocity;
     const hSpeedSq = vel.x * vel.x + vel.z * vel.z;
