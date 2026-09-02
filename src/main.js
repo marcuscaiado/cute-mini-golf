@@ -511,8 +511,8 @@ function addElevatedTerrace(px, py, pz, sx, sz, rampX, rampZ, rampLength, rampWi
     currentObstacleObjects.push({ mesh: rightFrontMesh, body: rightFrontBody });
   }
 
-  // Sloped Ramp
-  const inclineAngle = -Math.atan2(py, rampLength);
+  // Sloped Ramp (Always slopes UP gently from fairway ground to elevated terrace)
+  const inclineAngle = Math.atan2(py, rampLength);
   const rampHypot = Math.hypot(py, rampLength);
   const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampWidth, 0.12, rampHypot), courseMat);
   rampMesh.position.set(rampX, py / 2, rampZ);
@@ -549,7 +549,9 @@ function addElevatedTerrace(px, py, pz, sx, sz, rampX, rampZ, rampLength, rampWi
   });
 
   if (isHoleOnTerrace) {
+    holePos.x = THREE.MathUtils.clamp(holePos.x, px - sx / 2 + 1.4, px + sx / 2 - 1.4);
     holePos.y = py + 0.02;
+    holePos.z = THREE.MathUtils.clamp(holePos.z, pz - sz / 2 + 1.4, pz + sz / 2 - 1.4);
     holeMesh.position.set(holePos.x, holePos.y, holePos.z);
     ringMesh.position.set(holePos.x, holePos.y + 0.02, holePos.z);
     holeBody.position.set(holePos.x, py - 0.3, holePos.z);
@@ -627,13 +629,14 @@ function generateCourseLayout(archetypeIndex = -1) {
       if (isFarEnough(2.4, -2.8, 1.4)) addBumperCylinder(0.75, 0.6, 2.4, -2.8, 0x48dbfb);
     },
 
-    // 6: Double-Deck Terrace Bridge & Drop Funnel
+    // 6: Candy Carousel Slalom (Fairway Banks & Bumper Funnel)
     () => {
-      addElevatedTerrace(0, 0.8, 0, 4.2, 4.5, 0, 3.8, 3.2, 3.6, false);
-      if (isFarEnough(0, 0, 1.4)) addSpeedBooster(0, 0, 1.6, 2.6, 0, -1, 26.0);
-      if (isFarEnough(-2.8, 0, 1.4)) addSpikeTrap(-2.8, 0, 0.8, 5);
-      if (isFarEnough(2.8, 0, 1.4)) addSpikeTrap(2.8, 0, 0.8, 5);
-      if (isFarEnough(0, -4.5, 1.4)) addBumperCylinder(0.7, 0.6, 0, -4.5, 0xff6b9d);
+      addObstacleBox(3.4, 0.75, 0.6, -3.2, 0.35, 1.8, Math.PI / 4, obstacleMat);
+      addObstacleBox(3.4, 0.75, 0.6, 3.2, 0.35, 1.8, -Math.PI / 4, obstacleMat);
+      if (isFarEnough(0, 2.5, 1.5)) addSpeedBooster(0, 2.5, 1.8, 2.8, 0, -1, 24.0);
+      if (isFarEnough(-2.4, -2.0, 1.4)) addBumperCylinder(0.75, 0.6, -2.4, -2.0, 0xfeca57);
+      if (isFarEnough(2.4, -2.0, 1.4)) addBumperCylinder(0.75, 0.6, 2.4, -2.0, 0x48dbfb);
+      if (isFarEnough(0, -4.8, 1.4)) addBumperCylinder(0.75, 0.6, 0, -4.8, 0xff6b9d);
     }
   ];
 
