@@ -6,7 +6,7 @@
     <title>Cute Mini Golf 3D</title>
     <meta name="description" content="A cute, colorful 3D mini-golf game with Nintendo-inspired visuals" />
     <script src="arcade-leaderboard.js"></script>
-    <script type="module" crossorigin src="/cute-mini-golf/assets/index-Dndnehpf.js"></script>
+    <script type="module" crossorigin src="/cute-mini-golf/assets/index-BMi7ZHp2.js"></script>
     <link rel="stylesheet" crossorigin href="/cute-mini-golf/assets/index-DPNymR9a.css">
   </head>
   <body>
@@ -16,16 +16,9 @@
       <button id="nav-change-char-btn" class="nav-btn" style="display: none;">👤 Change Golfer</button>
     </nav>
 
-    <!-- CHARACTER / MODE SELECT SCREEN -->
+    <!-- CHARACTER SELECT SCREEN (1P SOLO) -->
     <div id="char-select">
       <h1 class="char-select-title">Cute Mini Golf 3D</h1>
-
-      <!-- MODE SELECTION TABS -->
-      <div class="mode-tabs">
-        <button class="mode-tab active" data-mode="solo">🏌️ Solo (1P)</button>
-        <button class="mode-tab" data-mode="1v1_local">🥊 1v1 Local (2P)</button>
-        <button class="mode-tab" data-mode="1v1_bot">🤖 1v1 vs Bot</button>
-      </div>
 
       <h2 id="char-select-subtitle" class="char-select-subtitle">Pick Your Golfer!</h2>
 
@@ -61,32 +54,6 @@
         <div class="char-indicator" id="char-indicator"></div>
       </div>
 
-      <!-- 1v1 DUAL SCORECARD -->
-      <div id="pvp-ui" class="pvp-hud" style="display: none;">
-        <div class="pvp-card p1-card active" id="p1-card">
-          <span class="pvp-badge p1-badge">P1</span>
-          <span class="pvp-char" id="p1-char-label">🐰 Bunny</span>
-          <div class="pvp-stats">
-            <span>Strokes: <strong id="p1-strokes">0</strong></span>
-            <span class="pvp-wins">Wins: <strong id="p1-wins">0</strong></span>
-          </div>
-        </div>
-
-        <div class="pvp-center">
-          <span id="pvp-hole-badge" class="pvp-hole-pill">Hole 1</span>
-          <div id="pvp-turn-banner" class="pvp-turn-banner">P1's Turn ⛳</div>
-        </div>
-
-        <div class="pvp-card p2-card" id="p2-card">
-          <span class="pvp-badge p2-badge" id="p2-badge-label">P2</span>
-          <span class="pvp-char" id="p2-char-label">🐸 Froggy</span>
-          <div class="pvp-stats">
-            <span>Strokes: <strong id="p2-strokes">0</strong></span>
-            <span class="pvp-wins">Wins: <strong id="p2-wins">0</strong></span>
-          </div>
-        </div>
-      </div>
-
       <div id="power-bar-container">
         <div id="power-bar"></div>
       </div>
@@ -96,7 +63,7 @@
       <div id="end-actions-container" style="display: none;">
         <button id="next-hole-btn" class="action-btn btn-primary">Next Hole ⛳</button>
         <button id="play-again-btn" class="action-btn btn-secondary">Restart Round 🔄</button>
-        <button id="switch-char-btn" class="action-btn btn-secondary">Mode / Golfers 👥</button>
+        <button id="switch-char-btn" class="action-btn btn-secondary">Change Golfer 👤</button>
         <a href="https://marcuscaiado.github.io/marcus-arcade/" class="action-btn btn-arcade">Arcade Hub 🕹️</a>
       </div>
 
