@@ -1732,6 +1732,7 @@ world.addEventListener('beginContact', (e) => {
 //  RESET & PLAY AGAIN
 // =============================================
 function resetGameState(fullReset = true) {
+  if (fullReset && window.ArcadeDifficulty) ArcadeDifficulty.reset();
   isBallMoving = false;
   p1.strokes = 0;
   p2.strokes = 0;
@@ -1887,7 +1888,9 @@ function tick() {
   // 3. ANIMATED WINDMILL BLADES & DOOR TIMING
   if (gameStarted) {
     for (const wm of activeWindmills) {
-      wm.bladeAngle += dt * wm.bladeSpeed;
+      const currentScore = (p1.strokes || 0) * 100 + currentHoleNumber * 50;
+      const ddaMult = window.ArcadeDifficulty ? ArcadeDifficulty.getMultiplier(currentScore, 1000, 1.8) : 1.0;
+      wm.bladeAngle += dt * (wm.bladeSpeed * ddaMult);
       wm.bladesGroup.rotation.z = wm.bladeAngle;
 
       const currBall = getActiveBall();
@@ -1958,7 +1961,8 @@ function tick() {
     if (!p1.inHole && !p1.isBroken) {
       const d1 = Math.hypot(ballMesh1.position.x - holePos.x, ballMesh1.position.z - holePos.z);
       const vd1 = Math.abs(ballMesh1.position.y - holePos.y);
-      if (d1 < HOLE_RADIUS * 1.4 && vd1 < 0.85) {
+      const suctionFactor = Math.max(1.15, 1.4 - (ddaMult - 1.0) * 0.2);
+      if (d1 < HOLE_RADIUS * suctionFactor && vd1 < 0.85) {
         ballBody1.velocity.x += (holePos.x - ballMesh1.position.x) * 10.0 * dt;
         ballBody1.velocity.z += (holePos.z - ballMesh1.position.z) * 10.0 * dt;
         ballBody1.velocity.y -= 14.0 * dt;
