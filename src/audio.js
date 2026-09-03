@@ -74,6 +74,10 @@ function playNoise(duration, volume = 0.08, delay = 0) {
 
 /** Club swing / hit — soft whoosh + impact pop */
 export function sfxSwing(power = 0.5) {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playBounce(0.7 + power * 0.8, 'wood');
+    return;
+  }
   const vol = 0.05 + power * 0.12;
   // Whoosh
   playNoise(0.15, vol);
@@ -90,6 +94,10 @@ export function sfxRoll() {
 
 /** Ball bouncing off a wall — crisp ping-pong ball 'pock/ping' tap */
 export function sfxBounce(intensity = 1.0) {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playBounce(intensity);
+    return;
+  }
   const ctx = getCtx();
   const t = ctx.currentTime;
   const vol = Math.min(0.3, 0.08 + intensity * 0.15);
@@ -198,6 +206,11 @@ export function explodeConfetti(x = window.innerWidth / 2, y = window.innerHeigh
 
 /** Ball drops into hole — satisfying cup thunk + celestial dopamine chime + confetti */
 export function sfxHoleSink() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playTriumph();
+    explodeConfetti(window.innerWidth / 2, window.innerHeight * 0.4, 65);
+    return;
+  }
   const ctx = getCtx();
   const t = ctx.currentTime;
 
@@ -241,6 +254,10 @@ export function sfxHoleSink() {
 
 /** Victory fanfare — happy royal dopamine fanfare */
 export function sfxVictory() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playTriumph();
+    return;
+  }
   const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
   notes.forEach((freq, i) => {
     playTone(freq, 0.35, 'triangle', 0.16, i * 0.08);
@@ -251,12 +268,20 @@ export function sfxVictory() {
 
 /** UI click sound — light tap */
 export function sfxClick() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playClick();
+    return;
+  }
   playTone(800, 0.05, 'sine', 0.08);
   playTone(1200, 0.03, 'sine', 0.05, 0.02);
 }
 
 /** Character select — cute boing */
 export function sfxSelect() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playPop(1.4);
+    return;
+  }
   playTone(400, 0.1, 'sine', 0.1);
   playTone(600, 0.1, 'sine', 0.1, 0.08);
   playTone(800, 0.15, 'sine', 0.08, 0.16);
@@ -264,6 +289,10 @@ export function sfxSelect() {
 
 /** Speed booster pad / conveyor belt whoosh */
 export function sfxBoost() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playCollectStreak(3);
+    return;
+  }
   const ctx = getCtx();
   const t = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -294,6 +323,10 @@ export function sfxBoost() {
 
 /** Spike trap impact — ceramic/glass ball break crack + low pop */
 export function sfxBallBreak() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playSoftThud(1.3);
+    return;
+  }
   const ctx = getCtx();
   const t = ctx.currentTime;
 
@@ -342,6 +375,10 @@ export function sfxLoop() {
 
 /** Ball respawn sparkle chime */
 export function sfxRespawn() {
+  if (typeof window !== 'undefined' && window.arcadeAudio) {
+    window.arcadeAudio.playPop(1.2);
+    return;
+  }
   playTone(523, 0.08, 'sine', 0.1, 0.0);
   playTone(784, 0.1, 'sine', 0.1, 0.06);
   playTone(1046, 0.15, 'sine', 0.12, 0.12);
