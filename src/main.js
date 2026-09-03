@@ -1822,6 +1822,12 @@ function tick() {
 
   world.step(1 / 60, dt, 3);
 
+  // Dynamic Difficulty Multiplier for current hole
+  const currentScore = (p1.strokes || 0) * 100 + currentHoleNumber * 50;
+  const ddaMult = (typeof ArcadeDifficulty !== 'undefined' && ArcadeDifficulty.getMultiplier)
+    ? ArcadeDifficulty.getMultiplier(currentScore, 1000, 1.8)
+    : 1.0;
+
   // Sync ball meshes
   if (!p1.inHole && !p1.isBroken) {
     ballMesh1.position.copy(ballBody1.position);
@@ -1888,8 +1894,6 @@ function tick() {
   // 3. ANIMATED WINDMILL BLADES & DOOR TIMING
   if (gameStarted) {
     for (const wm of activeWindmills) {
-      const currentScore = (p1.strokes || 0) * 100 + currentHoleNumber * 50;
-      const ddaMult = window.ArcadeDifficulty ? ArcadeDifficulty.getMultiplier(currentScore, 1000, 1.8) : 1.0;
       wm.bladeAngle += dt * (wm.bladeSpeed * ddaMult);
       wm.bladesGroup.rotation.z = wm.bladeAngle;
 
